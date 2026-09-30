@@ -1,0 +1,24 @@
+package-as: LootRules
+enable-toc-creation: yes
+
+# The addon lives in LootRules/ in the repo; ship that folder as the package
+# root, so the zip contains just LootRules/ with the TOCs and Lua files.
+move-folders:
+  LootRules/LootRules: LootRules
+
+ignore:
+  - .github
+  - .gitignore
+  - .luacheckrc
+  - .pkgmeta
+  - AGENTS.md
+  - CLAUDE.md
+  - CONTRIBUTING.md
+  - README.md
+  - RELEASE_NOTES.md
+  - tests
+
+# Generated in CI from "Changelog:" commit trailers; see CONTRIBUTING.md.
+manual-changelog:
+  filename: RELEASE_NOTES.md
+  markup-type: markdown

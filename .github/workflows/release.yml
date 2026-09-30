@@ -1,0 +1,21 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
+  # Release notes, packaging and publishing live in the org's shared workflow:
+  # https://github.com/geekoo-wow/.github
+  release:
+    needs: test
+    uses: geekoo-wow/.github/.github/workflows/addon-release.yml@v1
+    permissions:
+      contents: write
+    with:
+      addon-name: LootRules   # heading of the release notes
+    secrets: inherit

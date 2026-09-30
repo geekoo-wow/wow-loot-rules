@@ -1,0 +1,20 @@
+## Interface: 16001, 120000, 120001, 120005, 120007, 120100
+## Interface-Retail: 120000, 120001, 120005, 120007, 120100
+## Interface-Forever: 16001
+## Title: LootRules
+## Notes: Rule-based autoloot: loot what your rules accept (rarity, vendor value, lists, expressions), leave the rest.
+## Author: geekoo-wow
+## Version: @project-version@
+## SavedVariables: LootRulesDB
+## Category: Inventory
+## X-Curse-Project-ID: 1718897
+
+Core.lua
+Engine.lua
+Context.lua
+Config.lua
+Looter.lua
+Commands.lua
+Tooltip.lua
+UI.lua
+Init.lua

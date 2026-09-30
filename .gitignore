@@ -1,0 +1,4 @@
+.DS_Store
+*.zip
+.release/
+RELEASE_NOTES.md
