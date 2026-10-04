@@ -297,25 +297,21 @@ end
 
 local function BuildGeneral()
   local f = Panel("LootRules", "Rule-based autoloot: loots what your rules accept and leaves the rest on the corpse.")
-  local db = function() return ns.db end
+  local function setting(key, label, tip)
+    return Check(f, label, tip, function() return Config.Get(key) end, function(v) Config.Set(key, v) end)
+  end
 
   local checks = {
-    Check(f, "Enabled", "Filter loot with your rules. When off, nothing is looted automatically.",
-      function() return db().enabled end, function(v) db().enabled = v end),
-    Check(f, "Dry run", "Evaluate rules and print what they would do, but loot everything.",
-      function() return db().dryRun end, function(v) db().dryRun = v end),
-    Check(f, "Debug output", "Print every loot decision in chat, with the rule that made it.",
-      function() return db().debug end, function(v) db().debug = v end),
-    Check(f, "Close loot window when done",
-      "After looting the items your rules accept, close the window and leave the rest on the corpse.",
-      function() return db().closeWhenDone end, function(v) db().closeWhenDone = v end),
-    Check(f, "Confirm bind-on-pickup items",
-      "Automatically confirm the bind-on-pickup prompt for items your rules chose to loot.",
-      function() return db().confirmBoP end, function(v) db().confirmBoP = v end),
-    Check(f, "Show decision on item tooltips",
+    setting("enabled", "Enabled", "Filter loot with your rules. When off, nothing is looted automatically."),
+    setting("dryRun", "Dry run", "Evaluate rules and print what they would do, but loot everything."),
+    setting("debug", "Debug output", "Print every loot decision in chat, with the rule that made it."),
+    setting("closeWhenDone", "Close loot window when done",
+      "After looting the items your rules accept, close the window and leave the rest on the corpse."),
+    setting("confirmBoP", "Confirm bind-on-pickup items",
+      "Automatically confirm the bind-on-pickup prompt for items your rules chose to loot."),
+    setting("tooltip", "Show decision on item tooltips",
       "Add a line to item tooltips saying whether your rules would loot or leave the item, and which rule decides. "
-      .. "Tooltips assume a single unit dropped.",
-      function() return db().tooltip end, function(v) db().tooltip = v end),
+      .. "Tooltips assume a single unit dropped."),
   }
   local prev
   for i, cb in ipairs(checks) do
@@ -765,7 +761,7 @@ function UI.Init()
   UI.category = main
 
   hookLinks()
-  ns.OnRulesChanged = UI.Refresh
+  ns.OnConfigChanged = UI.Refresh
 
   -- Item names/prices arrive asynchronously; redraw what's showing.
   local events = CreateFrame("Frame")

@@ -10,6 +10,20 @@ ns.Config = Config
 
 local function rules() return ns.db.ruleset.rules end
 
+-- ---- settings ---------------------------------------------------------------
+
+-- The on/off settings: every boolean in ns.DEFAULTS (enabled, dryRun, debug,
+-- closeWhenDone, confirmBoP, tooltip).
+function Config.Get(key) return ns.db[key] end
+
+function Config.Set(key, value)
+  if type(ns.DEFAULTS[key]) ~= "boolean" then return end
+  ns.db[key] = value and true or false
+  ns.ConfigChanged()
+end
+
+-- ---- rules ------------------------------------------------------------------
+
 function Config.Rules() return rules() end
 
 -- The expression shown in the editor for a rule, whatever form it's stored in.
@@ -109,14 +123,14 @@ function Config.AddToList(listName, item)
   if not id then return nil, "not an item link or item ID" end
   ns.db.lists[listName] = ns.db.lists[listName] or {}
   ns.db.lists[listName][id] = true
-  if ns.OnRulesChanged then ns.OnRulesChanged() end
+  ns.ConfigChanged()
   return id
 end
 
 function Config.RemoveFromList(listName, id)
   local list = ns.db.lists[listName]
   if list then list[id] = nil end
-  if ns.OnRulesChanged then ns.OnRulesChanged() end
+  ns.ConfigChanged()
 end
 
 function Config.ListItems(listName)

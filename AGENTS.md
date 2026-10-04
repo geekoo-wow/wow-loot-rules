@@ -27,8 +27,10 @@ for the built-in autoloot. See README.md for behaviour.
   a new context field must be added there too (tests enforce both this and
   the structured condition).
 - Settings UI: `UI.lua` only draws widgets; every config change goes through
-  `Config.lua`, which is what the tests exercise. `tests/test_ui.lua` builds
-  the panels against stub widgets (catches wiring errors, not layout).
+  `Config.lua` (`Config.Set` for the on/off settings, also used by `/lr`),
+  which is what the tests exercise and what tells the UI to redraw
+  (`ns.ConfigChanged`). `tests/test_ui.lua` builds the panels against stub
+  widgets (catches wiring errors, not layout).
 - SavedVariables are hand-editable, so nothing read from them may raise:
   `Core.lua` normalizes the shape at load, `Engine.Compile` reports bad rules
   and drops them, `Engine.WhenToExpr` renders what it can't understand as

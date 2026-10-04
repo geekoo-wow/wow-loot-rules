@@ -204,13 +204,19 @@ function ns.InitDB()
   return db
 end
 
+-- Called after any change to the saved config; the settings UI hooks
+-- ns.OnConfigChanged to redraw what's showing.
+function ns.ConfigChanged()
+  if ns.OnConfigChanged then ns.OnConfigChanged() end
+end
+
 -- Recompile the ruleset; call after any rule change.
 function ns.Rebuild()
   local compiled, errors = ns.Engine.Compile(ns.db.ruleset)
   ns.compiled = compiled
   ns.compileErrors = errors
   for _, e in ipairs(errors) do ns.Print("|cffff5555rule error:|r " .. e) end
-  if ns.OnRulesChanged then ns.OnRulesChanged() end
+  ns.ConfigChanged()
   return errors
 end
 

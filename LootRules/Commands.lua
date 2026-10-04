@@ -22,13 +22,11 @@ function Commands.Run(msg)
     ns.Print("settings panel unavailable")
   elseif TOGGLES[cmd] then
     local t = TOGGLES[cmd]
-    ns.db[t.key] = not ns.db[t.key]
-    ns.Print(t.label .. " " .. onOff(ns.db[t.key]))
-    if ns.UI then ns.UI.Refresh() end
+    ns.Config.Set(t.key, not ns.Config.Get(t.key))
+    ns.Print(t.label .. " " .. onOff(ns.Config.Get(t.key)))
   elseif cmd == "on" or cmd == "off" then
-    ns.db.enabled = cmd == "on"
-    ns.Print("filtering " .. onOff(ns.db.enabled))
-    if ns.UI then ns.UI.Refresh() end
+    ns.Config.Set("enabled", cmd == "on")
+    ns.Print("filtering " .. onOff(ns.Config.Get("enabled")))
   else
     ns.Print("/lr — open settings; /lr debug | dry | tooltip | on | off — quick toggles")
   end
