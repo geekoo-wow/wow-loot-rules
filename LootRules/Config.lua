@@ -22,6 +22,28 @@ function Config.Set(key, value)
   ns.ConfigChanged()
 end
 
+-- The key that keeps the loot window open when held as it opens: one of
+-- ns.MODIFIERS, "NONE" for no key.
+function Config.KeepOpenModifier() return ns.db.keepOpenModifier end
+
+function Config.SetKeepOpenModifier(key)
+  if not ns.MODIFIER_LABELS[key] then return end
+  ns.db.keepOpenModifier = key
+  ns.ConfigChanged()
+end
+
+-- Switch to the next choice in ns.MODIFIERS, wrapping around.
+function Config.CycleKeepOpenModifier()
+  local keys = ns.MODIFIERS
+  local at = 0
+  for i, key in ipairs(keys) do
+    if key == ns.db.keepOpenModifier then at = i end
+  end
+  Config.SetKeepOpenModifier(keys[at % #keys + 1])
+end
+
+function Config.ModifierLabel(key) return ns.MODIFIER_LABELS[key] or ns.MODIFIER_LABELS.NONE end
+
 -- ---- rules ------------------------------------------------------------------
 
 function Config.Rules() return rules() end

@@ -61,6 +61,50 @@ test("closeWhenDone off leaves the window open", function()
   eq(T.mock.closed, 0)
 end)
 
+test("keep-open key held: the rules still run, the window stays open", function()
+  local ns = T.load()
+  setupItems()
+  local M = T.mock
+  ns.db.debug = true
+  ns.Config.SetKeepOpenModifier("CTRL")
+  M.keys.CTRL = true
+  M.openLoot({ { id = 1 }, { id = 2 } })
+  ns.Looter.frame:Fire("LOOT_READY", false)
+  eq(M.looted, { 2 }, "the junk is still left")
+  M.keys.CTRL = false -- let go before the silk reaches the bags
+  ns.Looter.frame:Fire("LOOT_SLOT_CLEARED", 2)
+  eq(M.closed, 0)
+  eq(#printedMatching("Ctrl held — leaving the loot window open"), 1)
+
+  ns.Looter.frame:Fire("LOOT_CLOSED")
+  M.openLoot({ { id = 1 } })
+  ns.Looter.frame:Fire("LOOT_READY", false)
+  eq(M.closed, 1, "the next window, opened without the key, closes as usual")
+end)
+
+test("keep-open key: off by default, and only the configured key counts", function()
+  local ns = T.load()
+  setupItems()
+  local M = T.mock
+  M.keys.CTRL, M.keys.ALT, M.keys.SHIFT = true, true, true
+  M.openLoot({ { id = 1 } })
+  ns.Looter.frame:Fire("LOOT_READY", false)
+  eq(M.closed, 1, "no key configured")
+  ns.Looter.frame:Fire("LOOT_CLOSED")
+
+  ns.Config.SetKeepOpenModifier("CTRL")
+  M.keys.CTRL = false
+  M.openLoot({ { id = 1 } })
+  ns.Looter.frame:Fire("LOOT_READY", false)
+  eq(M.closed, 1, "Alt and Shift held, Ctrl configured")
+  ns.Looter.frame:Fire("LOOT_CLOSED")
+
+  ns.Config.SetKeepOpenModifier("ALT")
+  M.openLoot({ { id = 1 } })
+  ns.Looter.frame:Fire("LOOT_READY", false)
+  eq(M.closed, 0)
+end)
+
 test("quest items are always looted", function()
   local ns = T.load()
   setupItems()

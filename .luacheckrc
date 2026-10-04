@@ -12,6 +12,7 @@ read_globals = {
   "GetItemInfo", "GetItemInfoInstant", "GetItemCount", "GetContainerNumFreeSlots",
   "GameTooltip", "GetTime", "hooksecurefunc", "GetCursorInfo", "ClearCursor", "ChatFontNormal",
   "Settings", "ChatEdit_InsertLink", "ChatFrameUtil",
+  "IsShiftKeyDown", "IsControlKeyDown", "IsAltKeyDown", "GetModifiedClick",
 }
 
 globals = { "LootRulesDB", "SlashCmdList", "SLASH_LOOTRULES1", "SLASH_LOOTRULES2" }

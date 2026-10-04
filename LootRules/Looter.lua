@@ -5,6 +5,10 @@
 -- everything before addons can intervene). Holding the autoloot modifier
 -- (Shift by default) then makes the client loot everything for that one
 -- corpse, which doubles as a "just take it all" override.
+--
+-- Holding the addon's own key (db.keepOpenModifier) while the window opens
+-- is the opposite override: the rules run as usual, but the window stays
+-- open so what they left can still be picked up by hand.
 
 local _, ns = ...
 ns = ns or {}
@@ -20,7 +24,7 @@ local function slotTypes()
 end
 
 -- State for the currently open loot window.
-local session = { active = false, pending = {}, leftAny = false }
+local session = { active = false, pending = {}, leftAny = false, keepOpen = false }
 Looter.session = session
 
 local warnedBuiltin = false
@@ -47,8 +51,17 @@ local function builtinAutolootOn()
   return _G.GetCVarBool and _G.GetCVarBool("autoLootDefault")
 end
 
+-- db.keepOpenModifier -> is that key down? "NONE" has no entry.
+local MODIFIER_DOWN = { SHIFT = IsShiftKeyDown, CTRL = IsControlKeyDown, ALT = IsAltKeyDown }
+
+local function keepOpenHeld()
+  local isDown = MODIFIER_DOWN[ns.db.keepOpenModifier]
+  return isDown ~= nil and isDown() and true or false
+end
+
 local function maybeClose()
-  if session.active and ns.db.closeWhenDone and session.leftAny and next(session.pending) == nil then
+  if session.active and ns.db.closeWhenDone and not session.keepOpen and session.leftAny
+    and next(session.pending) == nil then
     CloseLoot()
   end
 end
@@ -73,6 +86,9 @@ function Looter.Process(autoLoot)
 
   session.active = true
   session.leftAny = false
+  -- Read once, as the window opens: letting go while the slots are still
+  -- being looted doesn't close it after all.
+  session.keepOpen = keepOpenHeld()
   wipe(session.pending)
 
   local ITEM, MONEY, CURRENCY = slotTypes()
@@ -103,6 +119,9 @@ function Looter.Process(autoLoot)
     end
   end
 
+  if session.keepOpen and session.leftAny and db.closeWhenDone then
+    ns.Debug(ns.MODIFIER_LABELS[db.keepOpenModifier] .. " held — leaving the loot window open")
+  end
   maybeClose()
 end
 
@@ -122,6 +141,7 @@ end
 function Looter.OnClosed()
   session.active = false
   session.leftAny = false
+  session.keepOpen = false
   wipe(session.pending)
 end
 

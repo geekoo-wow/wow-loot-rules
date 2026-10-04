@@ -13,6 +13,8 @@ ns.DEFAULTS = {
   dryRun = false,        -- evaluate and print decisions, but loot everything
   debug = false,         -- print every decision, with the rule that made it
   closeWhenDone = true,  -- close the window once our picks are looted, leaving the rest on the corpse
+  -- "CTRL", "ALT" or "SHIFT": held while opening a corpse, the rules still run but the window stays open
+  keepOpenModifier = "NONE",
   confirmBoP = true,     -- auto-confirm bind-on-pickup prompts for slots *we* chose to loot
   tooltip = true,        -- show the rules' decision on item tooltips
   lists = {
@@ -36,6 +38,10 @@ ns.DEFAULTS = {
     },
   },
 }
+
+-- Choices for keepOpenModifier, in the order the settings cycle through them.
+ns.MODIFIERS = { "NONE", "CTRL", "ALT", "SHIFT" }
+ns.MODIFIER_LABELS = { NONE = "None", CTRL = "Ctrl", ALT = "Alt", SHIFT = "Shift" }
 
 local function deepCopy(v)
   if type(v) ~= "table" then return v end
@@ -75,6 +81,13 @@ local function normalizeRules(db)
   for i, rule in ipairs(rules) do
     if type(rule.name) ~= "string" then rule.name = "Rule " .. i end
   end
+end
+
+-- A keepOpenModifier that isn't one of ns.MODIFIERS counts as missing.
+local function normalizeSettings(db)
+  local key = db.keepOpenModifier
+  if type(key) == "string" then key = key:upper() end
+  db.keepOpenModifier = ns.MODIFIER_LABELS[key] and key or nil
 end
 
 local function deepEqual(a, b)
@@ -197,6 +210,7 @@ function ns.InitDB()
   if type(_G.LootRulesDB) ~= "table" then _G.LootRulesDB = {} end
   local db = _G.LootRulesDB
   normalizeRules(db)
+  normalizeSettings(db)
   migrate(db)
   mergeDefaults(db, ns.DEFAULTS)
   ns.db = db

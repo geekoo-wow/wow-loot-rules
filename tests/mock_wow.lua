@@ -9,6 +9,8 @@ M.bags = { free = 20 }
 M.bagItems = {}   -- [bag] = { [slot] = { id = n, count = n } }
 M.owned = {}      -- [itemID] = count
 M.cvars = { autoLootDefault = "0" }
+M.keys = {}       -- modifier keys held down: SHIFT / CTRL / ALT = true
+M.modifiedClicks = { AUTOLOOTTOGGLE = "SHIFT" }
 M.secret = {}     -- values in here are "secret"
 
 function M.reset()
@@ -17,6 +19,8 @@ function M.reset()
   M.bagItems = {}
   M.tooltipPostCalls = {}
   M.cvars = { autoLootDefault = "0" }
+  M.keys = {}
+  M.modifiedClicks = { AUTOLOOTTOGGLE = "SHIFT" }
   M.window = { slots = {} }
   M.looted, M.closed, M.confirmed, M.popupsHidden, M.printed = {}, 0, {}, {}, {}
   M.widgets, M.categories, M.hooks, M.opened, M.cursor = {}, {}, {}, nil, nil
@@ -127,6 +131,11 @@ function _G.issecretvalue(v) return M.secret[v] == true end
 
 function _G.GetCVarBool(name) return M.cvars[name] == "1" end
 function _G.SetCVar(name, v) M.cvars[name] = tostring(v) end
+
+function _G.IsShiftKeyDown() return M.keys.SHIFT == true end
+function _G.IsControlKeyDown() return M.keys.CTRL == true end
+function _G.IsAltKeyDown() return M.keys.ALT == true end
+function _G.GetModifiedClick(action) return M.modifiedClicks[action] or "NONE" end
 
 _G.DEFAULT_CHAT_FRAME = { AddMessage = function(_, msg) M.printed[#M.printed + 1] = msg end }
 

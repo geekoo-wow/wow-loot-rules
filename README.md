@@ -31,7 +31,9 @@ client's line and to the base `## Interface:` line.
    **turn off the game's Auto Loot** there. The client loots everything before
    addons can intervene, so LootRules only works with it off. Holding the
    autoloot modifier (Shift by default) makes the client loot everything on
-   that one corpse, a handy override.
+   that one corpse, a handy override. You can also pick a key that does the
+   opposite: your rules still run, but the loot window stays open (see
+   [Keeping the window open](#keeping-the-window-open)).
 
 Start with **Dry run** on for a few kills: everything is still looted, and
 chat shows what the rules *would* have done and which rule decided.
@@ -41,8 +43,8 @@ chat shows what the rules *would* have done and which rule decided.
 Everything is configured in Options > AddOns > LootRules:
 
 - **LootRules**: enable/disable, dry run, debug output, close the loot window
-  when done, auto-confirm bind-on-pickup, the tooltip line, and the game's
-  Auto Loot status.
+  when done and the key that keeps it open, auto-confirm bind-on-pickup, the
+  tooltip line, and the game's Auto Loot status.
 - **Rules**: the ordered rule list. Select a rule to edit its name, action
   (Loot/Leave) and condition; the condition is validated as you type. Rules
   can be added, reordered, disabled and deleted, and the action for items no
@@ -55,6 +57,22 @@ The settings panel blocks the bag keybinds, so every item box (lists,
 tester) has a **Bags…** button: a searchable list of what's in your bags,
 shown over the panel. Item boxes also take a typed item ID or a shift-clicked
 chat link.
+
+## Keeping the window open
+
+With **Close loot window when done** on, the window closes as soon as your
+picks are looted, and whatever the rules left stays on the corpse. To
+double-check a corpse, choose a key with the **Hold to keep the window open**
+button in the settings (None by default; Ctrl, Alt or Shift) and hold it
+while opening the corpse: the rules loot what they accept as usual, but the
+window stays open so you can take anything they left by hand.
+
+It has to be a different key from the game's autoloot key (Shift by default),
+because that one makes the client loot everything before the rules run; the
+settings panel warns when the two are the same. Either pick another key, or
+set the game's autoloot key to None in the game's own options. The key is
+read when the window opens, so you can let go while the items are still
+being looted.
 
 ## Item tooltips
 

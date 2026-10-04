@@ -361,6 +361,30 @@ test("settings are booleans set through Config", function()
   eq(refreshes, 2)
 end)
 
+test("the keep-open key is one of the known modifiers", function()
+  local ns = T.load()
+  eq(ns.Config.KeepOpenModifier(), "NONE", "off until a key is chosen")
+  local refreshes = 0
+  ns.OnConfigChanged = function() refreshes = refreshes + 1 end
+  ns.Config.SetKeepOpenModifier("ALT")
+  eq(ns.db.keepOpenModifier, "ALT")
+  ns.Config.SetKeepOpenModifier("META"); ns.Config.SetKeepOpenModifier(nil)
+  eq(ns.db.keepOpenModifier, "ALT"); eq(refreshes, 1)
+  local seen = {}
+  for _ = 1, #ns.MODIFIERS do
+    ns.Config.CycleKeepOpenModifier()
+    seen[#seen + 1] = ns.db.keepOpenModifier
+  end
+  eq(seen, { "SHIFT", "NONE", "CTRL", "ALT" }, "cycles through every choice and wraps")
+end)
+
+test("a hand-edited keep-open key is normalized at load", function()
+  eq(T.load({ keepOpenModifier = "alt" }).db.keepOpenModifier, "ALT")
+  eq(T.load({ keepOpenModifier = "CTRL" }).db.keepOpenModifier, "CTRL")
+  eq(T.load({ keepOpenModifier = "banana" }).db.keepOpenModifier, "NONE")
+  eq(T.load({ keepOpenModifier = 3 }).db.keepOpenModifier, "NONE")
+end)
+
 -- ---- relevant values ------------------------------------------------------------
 
 test("FieldsOf lists only fields a rule reads, not helpers or constants", function()
