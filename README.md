@@ -178,8 +178,13 @@ Layout:
 - `Tooltip.lua`: the decision line on item tooltips
 - `Looter.lua`: loot-window event handling and decision output
 - `Commands.lua`: `/lr`
-- `Core.lua`: defaults, SavedVariables, output helpers
+- `Core.lua`: defaults, SavedVariables (loading, migration), output helpers
+- `Init.lua`: loaded last; starts the modules above
 - `LootRules.toc`: the file list and per-client interface versions
+
+The tests live in `tests/`: `run.lua` loads the addon in TOC order against
+`mock_wow.lua` (a stand-in for the WoW API) once per test, so each test
+starts from a fresh addon and fresh SavedVariables.
 
 Every push to a branch runs lint and tests, then builds the addon zip without
 publishing it: download it from the run's **Artifacts** to try a build in game.

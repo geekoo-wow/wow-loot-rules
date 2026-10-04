@@ -18,7 +18,7 @@ function M.reset()
   M.tooltipPostCalls = {}
   M.cvars = { autoLootDefault = "0" }
   M.window = { slots = {} }
-  M.looted, M.closed, M.confirmed, M.printed = {}, 0, {}, {}
+  M.looted, M.closed, M.confirmed, M.popupsHidden, M.printed = {}, 0, {}, {}, {}
   M.widgets, M.categories, M.hooks, M.opened, M.cursor = {}, {}, {}, nil, nil
 end
 M.reset()
@@ -38,7 +38,7 @@ end
 -- slots: array of { money = n } | { currency = true } | { id = n, qty = n, locked = b, quest = b }
 function M.openLoot(slots)
   M.window = { slots = slots }
-  M.looted, M.closed, M.confirmed = {}, 0, {}
+  M.looted, M.closed, M.confirmed, M.popupsHidden = {}, 0, {}, {}
 end
 
 -- ---- globals --------------------------------------------------------------
@@ -76,6 +76,7 @@ end
 function _G.LootSlot(slot) M.looted[#M.looted + 1] = slot end
 function _G.CloseLoot() M.closed = M.closed + 1 end
 function _G.ConfirmLootSlot(slot) M.confirmed[#M.confirmed + 1] = slot end
+function _G.StaticPopup_Hide(which) M.popupsHidden[#M.popupsHidden + 1] = which end
 
 local function resolve(item)
   local id = type(item) == "number" and item or tonumber(tostring(item):match("item:(%d+)"))

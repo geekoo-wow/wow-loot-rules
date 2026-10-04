@@ -54,6 +54,86 @@ test("rules panel: invalid condition is not saved", function()
   eq(ns.db.ruleset.rules[4].when.expr, before)
 end)
 
+local function button(text)
+  return findWidget(function(w) return w.kind == "Button" and w.text == text end)
+end
+
+test("rules panel: delete and reset both need a second click", function()
+  local ns = T.load()
+  ns.UI.rulesPanel:Show()
+  local n = #ns.Config.Rules()
+  ns.UI.SelectRule(4)
+  local del = button("Delete")
+  del:Click()
+  eq(#ns.Config.Rules(), n, "first click only arms")
+  eq(del.text, "Confirm?")
+  ns.UI.SelectRule(5)
+  eq(del.text, "Delete", "selecting another rule disarms")
+  del:Click(); del:Click()
+  eq(#ns.Config.Rules(), n - 1)
+  eq(ns.Config.Rules()[4].name, "Cheap junk", "rule 5 went, not rule 4")
+
+  local reset = button("Reset to defaults")
+  reset:Click()
+  eq(#ns.Config.Rules(), n - 1)
+  reset:Click()
+  eq(ns.db.ruleset, ns.DEFAULTS.ruleset)
+  truthy(ns.db.ruleset ~= ns.DEFAULTS.ruleset, "a copy, so edits can't reach the defaults")
+end)
+
+test("rules panel: add, move and the default action go through Config", function()
+  local ns = T.load()
+  ns.UI.rulesPanel:Show()
+  ns.UI.rulesPanel:Refresh()
+  local n = #ns.Config.Rules()
+  button("Add rule"):Click()
+  eq(#ns.Config.Rules(), n + 1)
+  button("Move up"):Click()
+  eq(ns.Config.Rules()[n].name, "New rule", "the new rule is selected, so it is the one that moves")
+  button("Move down"):Click(); button("Move down"):Click()
+  eq(ns.Config.Rules()[n + 1].name, "New rule", "can't move past the end")
+  local default = findWidget(function(w) return w.kind == "Button" and w.text:find("If no rule matches", 1, true) end)
+  default:Click()
+  eq(ns.db.ruleset.default, "leave")
+  truthy(default.text:find("Leave", 1, true), default.text)
+end)
+
+test("general panel: checkboxes change settings through Config", function()
+  local ns = T.load()
+  ns.UI.panels[1]:Show()
+  ns.UI.panels[1]:Refresh()
+  local labels = {
+    ["Enabled"] = "enabled", ["Dry run"] = "dryRun", ["Debug output"] = "debug",
+    ["Close loot window when done"] = "closeWhenDone", ["Confirm bind-on-pickup items"] = "confirmBoP",
+    ["Show decision on item tooltips"] = "tooltip",
+  }
+  local seen = 0
+  for _, w in ipairs(T.mock.widgets) do
+    local key = w.kind == "CheckButton" and rawget(w, "label") and labels[w.label.text]
+    if key then
+      seen = seen + 1
+      eq(w.checked, ns.DEFAULTS[key], key .. " shows the saved value")
+      w:SetChecked(not ns.DEFAULTS[key])
+      w:Click()
+      eq(ns.db[key], not ns.DEFAULTS[key], key)
+    end
+  end
+  eq(seen, 6, "one checkbox per setting")
+  ns.Commands.Run("dry")
+  local dry = findWidget(function(w) return w.kind == "CheckButton" and rawget(w, "label") and w.label.text == "Dry run" end)
+  eq(dry.checked, ns.db.dryRun, "/lr toggles show up in the open panel")
+end)
+
+test("general panel: the Auto Loot button flips the game setting", function()
+  local ns = T.load()
+  ns.UI.panels[1]:Show()
+  T.mock.cvars.autoLootDefault = "1"
+  ns.UI.panels[1]:Refresh()
+  button("Turn game Auto Loot off"):Click()
+  eq(T.mock.cvars.autoLootDefault, "0")
+  truthy(button("Turn game Auto Loot on"), "the button offers the opposite again")
+end)
+
 test("shift-click inserts links into a focused item box", function()
   local ns = T.load()
   local lists = ns.UI.panels[3]
