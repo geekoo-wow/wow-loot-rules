@@ -117,6 +117,35 @@ test("expression errors on nil fields become unknown, not crashes", function()
   eq(action, "loot"); eq(unknowns, { "e: condition" })
 end)
 
+test("matches() ignores case but keeps pattern classes intact", function()
+  local ns = T.load()
+  local one = T.mock.item(122, { name = "OneWord", quality = 1, sellPrice = 1 })
+  local two = T.mock.item(123, { name = "Two Words", quality = 1, sellPrice = 1 })
+  local function run(when, link)
+    return (decide(ns, { rules = { { name = "n", when = when, action = "leave" } } }, link))
+  end
+  -- %S is "not a space"; lowercased to %s it would mean the opposite.
+  eq(run({ expr = 'matches(name, "^%S+$")' }, one), "leave")
+  eq(run({ expr = 'matches(name, "^%S+$")' }, two), "loot")
+  eq(run({ name = "^%S+$" }, one), "leave", "structured form")
+  eq(run({ name = "^%S+$" }, two), "loot", "structured form")
+  eq(run({ expr = 'matches(name, "^TWO %a+$")' }, two), "leave", "literal text is case-insensitive")
+end)
+
+test("expressions cannot modify the math library", function()
+  local ns = T.load()
+  local link = T.mock.item(124, { name = "X", quality = 1, sellPrice = 1 })
+  local floor = math.floor
+  local action = decide(ns, { rules = {
+    { name = "e", when = { expr = "(function() math.floor = nil end)() or true" }, action = "leave" },
+  } }, link)
+  local survived = math.floor == floor
+  math.floor = floor -- so a failure here can't take the other tests down with it
+  T.truthy(survived, "math.floor must survive")
+  eq(action, "loot", "the assignment fails, so the condition is undetermined")
+  eq((decide(ns, { rules = { { name = "m", when = { expr = "math.floor(1.5) == 1" }, action = "leave" } } }, link)), "leave")
+end)
+
 test("expressions cannot assign globals", function()
   local ns = T.load()
   local link = T.mock.item(109, { name = "X", quality = 1, sellPrice = 1 })

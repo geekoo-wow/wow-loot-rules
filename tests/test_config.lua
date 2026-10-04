@@ -23,6 +23,30 @@ test("validation catches syntax errors and unknown names", function()
   eq(ns.Config.Validate("vendorValue > 1e3"), nil, "numbers with exponents ok")
 end)
 
+test("validation reads expressions like Lua does", function()
+  local ns = T.load()
+  local ok = {
+    'matches(name, "say \\"hi\\" there")',         -- escaped quotes
+    "matches(name, 'it\\'s') or name == \"it's\"", -- both quote styles
+    "matches(name, [[of the Whale]])",             -- long strings
+    "quality == POOR -- grey",                     -- trailing comment
+    "quality == POOR --[[ grey ]] and ilvl < 5",
+    "quality == POOR -- grey\n and ilvl < 5",
+    "vendorValue > .5 and ilvl < 0x10 and reqLevel < 2.5e1",
+    'name:lower() == "x" and ("x"):rep(2) == "xx"', -- method calls
+    'name .. "!" == "x!"',
+  }
+  for _, expr in ipairs(ok) do eq(ns.Config.Validate(expr), nil, expr) end
+  local bad = {
+    ['"x" .. qualty == "x"'] = "qualty",        -- .. is not a member access
+    ["ilvl2 > 5"] = "ilvl2",                    -- reported as typed
+    ['matches(name, "a") and "b" == b'] = "b",  -- names next to strings
+    ["quality == POOR -- grey\n and ilvel < 5"] = "ilvel",
+    ["math.floor(ilvl) == floor"] = "floor",    -- only as a member
+  }
+  for expr, name in pairs(bad) do eq(ns.Config.Validate(expr), "unknown name '" .. name .. "'", expr) end
+end)
+
 test("structured rules render as equivalent expressions", function()
   local ns = T.load()
   eq(ns.Engine.WhenToExpr({ quality = { max = 0 }, vendorValue = { max = 100 } }),
@@ -247,6 +271,8 @@ test("FieldsOf lists only fields a rule reads, not helpers or constants", functi
     "strings and member accesses ignored")
   eq(ns.Engine.FieldsOf({ quality = 0, quest = true, list = "x", name = "^a" }), { "name", "quality", "isQuest" },
     "structured: in condition-key order")
+  eq(ns.Engine.FieldsOf({ expr = 'matches("" .. name, "x") and ilvl > 1e3 -- not quality' }), { "name", "ilvl" },
+    "fields after .. count; exponents and comments don't")
 end)
 
 test("tester reports only the deciding rule's values", function()

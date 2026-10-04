@@ -62,6 +62,14 @@ local function isSet(spec)
   return true
 end
 
+-- Lowercase a Lua pattern for case-insensitive matching, leaving the character
+-- after a % alone: there case is meaning (%S is "anything but %s").
+local function lowerPattern(pattern)
+  return (pattern:gsub("(%%?)(.)", function(escape, ch)
+    if escape == "" then return ch:lower() end
+  end))
+end
+
 -- ---------------------------------------------------------------------------
 -- Condition registry: name -> { check = fn(spec) -> errString|nil,
 --                               eval  = fn(spec, ctx) -> true|false|nil }
@@ -137,7 +145,7 @@ Conditions.name = {
   eval = function(spec, ctx)
     local n = ctx.name
     if n == nil then return nil end
-    return string.find(string.lower(n), string.lower(spec)) ~= nil
+    return string.find(string.lower(n), lowerPattern(spec)) ~= nil
   end,
 }
 
@@ -173,14 +181,17 @@ Engine.Fields = {
   { "owned",       "number",  "how many of this item you already carry" },
 }
 
+local function readOnly() error("expressions cannot assign", 2) end
+
 local ExprHelpers = {
   copper = function(n) return n end,
   silver = function(n) return n * 100 end,
   gold   = function(n) return n * 10000 end,
   -- Case-insensitive Lua pattern match.
-  matches = function(s, pattern) return string.find(string.lower(s), string.lower(pattern)) ~= nil end,
+  matches = function(s, pattern) return string.find(string.lower(s), lowerPattern(pattern)) ~= nil end,
   POOR = 0, COMMON = 1, UNCOMMON = 2, RARE = 3, EPIC = 4, LEGENDARY = 5,
-  math = math,
+  -- A read-only view: the real table is shared with every other addon.
+  math = setmetatable({}, { __index = math, __newindex = readOnly }),
 }
 Engine.ExprHelpers = ExprHelpers
 
@@ -203,14 +214,67 @@ local knownNames = { inList = true }
 for _, f in ipairs(Engine.Fields) do knownNames[f[1]] = true end
 for k in pairs(ExprHelpers) do knownNames[k] = true end
 
+-- Position just past the long bracket ([[...]], [==[...]==]) that opens at
+-- `pos`, or nil if none does.
+local function skipLongBracket(src, pos)
+  local level = src:match("^%[(=*)%[", pos)
+  if not level then return nil end
+  local _, stop = src:find("]" .. level .. "]", pos, true)
+  return (stop or #src) + 1
+end
+
+-- The names an expression uses, in order of appearance: every identifier
+-- that isn't a member access (the `floor` of math.floor, the `rep` of
+-- s:rep()). A small lexer, so string contents, comments, numbers such as 1e3
+-- and the `..` operator are never mistaken for names.
+local function namesIn(src)
+  local out = {}
+  local pos, len = 1, #src
+  local member = false -- the previous token was a lone "." or ":"
+  while pos <= len do
+    local c = src:sub(pos, pos)
+    local long = c == "[" and skipLongBracket(src, pos)
+    if c == '"' or c == "'" then
+      pos = pos + 1
+      while pos <= len and src:sub(pos, pos) ~= c do
+        pos = pos + (src:sub(pos, pos) == "\\" and 2 or 1)
+      end
+      pos = pos + 1
+      member = false
+    elseif src:find("^%-%-", pos) then
+      pos = skipLongBracket(src, pos + 2) or (src:find("\n", pos, true) or len) + 1
+    elseif long then
+      pos = long
+      member = false
+    elseif src:find("^%.?%d", pos) then
+      local _, stop = src:find("^0[xX]%x+", pos)
+      if not stop then
+        _, stop = src:find("^%d*%.?%d*", pos)
+        local _, exponent = src:find("^[eE][%+%-]?%d+", stop + 1)
+        stop = exponent or stop
+      end
+      pos = stop + 1
+      member = false
+    elseif src:find("^[%a_]", pos) then
+      local id = src:match("^[%a_][%w_]*", pos)
+      if not member then out[#out + 1] = id end
+      pos = pos + #id
+      member = false
+    elseif src:find("^%.%.", pos) then -- ".." and "..." are operators, not member accesses
+      pos = pos + #src:match("^%.+", pos)
+      member = false
+    else
+      if c == "." or c == ":" then member = true elseif not c:find("%s") then member = false end
+      pos = pos + 1
+    end
+  end
+  return out
+end
+
 -- Catch typos like "qualty" at save time; at runtime they'd silently be nil
--- and make the rule "unknown" forever. Crude lexer: drop strings, numbers
--- and member accesses (x.y, x:y), then check the remaining identifiers.
+-- and make the rule "unknown" forever.
 local function unknownIdentifier(src)
-  local s = src:gsub('%b""', '""'):gsub("%b''", "''")
-  s = s:gsub("0[xX]%x+", "0"):gsub("%d+%.?%d*[eE][%+%-]?%d+", "0"):gsub("%d+%.?%d*", "0")
-  s = s:gsub("[%.:]%s*[%a_][%w_]*", "")
-  for id in s:gmatch("[%a_][%w_]*") do
+  for _, id in ipairs(namesIn(src)) do
     if not KEYWORDS[id] and not knownNames[id] then return id end
   end
 end
@@ -223,10 +287,8 @@ local isField = {}
 for _, f in ipairs(Engine.Fields) do isField[f[1]] = true end
 
 local function referencedFields(src)
-  local s = src:gsub('%b""', '""'):gsub("%b''", "''")
-  s = s:gsub("[%.:]%s*[%a_][%w_]*", "")
   local out, seen = {}, {}
-  for id in s:gmatch("[%a_][%w_]*") do
+  for _, id in ipairs(namesIn(src)) do
     if isField[id] and not seen[id] then
       seen[id] = true
       out[#out + 1] = id
@@ -258,8 +320,10 @@ function Engine.FieldsOf(when)
   return out
 end
 
+-- Returns the compiled function, or nil + error message.
 local function compileExpr(src)
-  local fn, err = loadstring("return (" .. src .. ")", "=condition")
+  -- The newline lets the expression end in a "--" comment.
+  local fn, err = loadstring("return (" .. src .. "\n)", "=condition")
   if not fn then
     return nil, (tostring(err):gsub("^condition:%d+:%s*", ""))
   end
