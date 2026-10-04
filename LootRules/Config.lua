@@ -149,8 +149,8 @@ function Config.FormatMoney(c) return ns.FormatMoney(c) end
 
 -- The lines added to item tooltips: the verdict, and (when a rule decided)
 -- the values that rule read. nil when tooltips are off. Tooltips have no
--- loot slot, so this assumes a single unit and only knows quest status for
--- Quest-class items.
+-- loot slot, so this assumes a single unit and that only Quest-class items
+-- are quest items.
 function Config.TooltipLine(item)
   if not ns.db or not ns.db.tooltip or not ns.compiled then return nil end
   local r = Config.TestItem(item, 1)
@@ -208,8 +208,8 @@ function Config.ReferenceText()
   add("")
   add(gold .. "Unknown data|r")
   add("Item data can be missing (item not cached yet, values hidden in combat). A condition that")
-  add("needs missing data is 'undetermined' and the rule is skipped, unless 'Apply when data is")
-  add("unknown' is ticked. Undetermined conditions are shown in debug output.")
+  add("reads a missing value is 'undetermined', however the value is used, and the rule is skipped")
+  add("unless 'Apply when data is unknown' is ticked. Undetermined conditions are shown in debug output.")
   add("")
   add(gold .. "Fields|r")
   for _, f in ipairs(ns.Engine.Fields) do

@@ -117,6 +117,49 @@ test("expression errors on nil fields become unknown, not crashes", function()
   eq(action, "loot"); eq(unknowns, { "e: condition" })
 end)
 
+-- Missing data must never become a definite answer: `not x`, `x ~= y` and
+-- `x == y` are as undetermined as `x < y` when x is unknown.
+test("a condition that reads unknown data is undetermined, however the value is used", function()
+  local ns = T.load()
+  local link = T.mock.item(120, { name = "Uncached Reagent", quality = 1, sellPrice = 15, isReagent = true, cached = false })
+  for _, expr in ipairs({ "not isReagent", "bindType ~= 1", "quality == POOR", "isReagent", "vendorValue == nil" }) do
+    local rules = { rules = { { name = "e", when = { expr = expr }, action = "leave" } } }
+    local action, rule, unknowns = decide(ns, rules, link)
+    eq(action, "loot", expr); eq(rule, "default", expr); eq(unknowns, { "e: condition" }, expr)
+    rules.rules[1].onUnknown = "match"
+    eq((decide(ns, rules, link)), "leave", expr .. " with onUnknown = match")
+  end
+end)
+
+test("unknown data that a condition never reaches doesn't matter", function()
+  local ns = T.load()
+  local link = T.mock.item(121, { name = "Secret Price", quality = 1, sellPrice = 777 })
+  T.mock.secret[777] = true
+  local function run(expr)
+    return decide(ns, { rules = { { name = "e", when = { expr = expr }, action = "leave" } } }, link)
+  end
+  local action, _, unknowns = run("quality == EPIC and vendorValue < 5")
+  eq(action, "loot"); eq(unknowns, nil, "short-circuited before the price")
+  eq((run("quality == COMMON or vendorValue < 5")), "leave", "decided before the price")
+  action, _, unknowns = run("quality == COMMON and vendorValue < 5")
+  eq(action, "loot"); eq(unknowns, { "e: condition" })
+end)
+
+test("an item that can't be identified is unknown, not 'on no list'", function()
+  local ns = T.load()
+  local function run(when)
+    local compiled, errors = ns.Engine.Compile({ rules = { { name = "r", when = when, action = "leave" } } })
+    eq(#errors, 0)
+    return ns.Engine.Evaluate(compiled, ns.Context.FromLink(nil, 1, ns.db.lists))
+  end
+  local action, _, unknowns = run({ expr = 'not inList("whitelist")' })
+  eq(action, "loot"); eq(unknowns, { "r: condition" })
+  -- Structured conditions aren't protected by the expression sandbox: this
+  -- must not call the item API with nil (the game raises an error).
+  action, _, unknowns = run({ classID = 2 })
+  eq(action, "loot"); eq(unknowns, { "r: classID" })
+end)
+
 test("matches() ignores case but keeps pattern classes intact", function()
   local ns = T.load()
   local one = T.mock.item(122, { name = "OneWord", quality = 1, sellPrice = 1 })

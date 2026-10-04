@@ -132,10 +132,15 @@ is what the default junk rules use. `vendorValue * quantity` is the value of
 what dropped.
 
 **Unknown data.** Item data can be missing (item not cached yet, values
-hidden during combat). A condition that needs missing data is *undetermined*:
-the rule is skipped unless "Apply when data is unknown" is ticked. Skipping
-means falling through to later rules and ultimately the default (Loot), since
-leaving something valuable behind is worse than picking up junk.
+hidden during combat). A condition that reads a missing value is
+*undetermined*, whatever it does with the value: `not isReagent` and
+`bindType ~= 1` are as undetermined as `vendorValue < silver(1)` when the
+item's data hasn't arrived. The rule is then skipped unless "Apply when data
+is unknown" is ticked. Skipping means falling through to later rules and
+ultimately the default (Loot), since leaving something valuable behind is
+worse than picking up junk. `and` / `or` stop as early as in Lua, so a value
+that is never reached doesn't count: `quality >= RARE and vendorValue > gold(1)`
+is simply false for a grey item, whether or not its price is known.
 
 Rules are stored in `LootRulesDB.ruleset` in SavedVariables. Rules written by
 hand there may also use the structured form

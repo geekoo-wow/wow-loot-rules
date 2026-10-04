@@ -79,9 +79,7 @@ test("every documented field is loadable and every field is documented", functio
   local ns = T.load()
   local link = T.mock.item(310, { name = "Full", quality = 2, sellPrice = 10, classID = 4, subclassID = 2 })
   local ctx = ns.Context.FromLink(link, 1, ns.db.lists)
-  for _, f in ipairs(ns.Engine.Fields) do
-    if f[1] ~= "isQuest" then truthy(ctx[f[1]] ~= nil, "field " .. f[1] .. " should load") end
-  end
+  for _, f in ipairs(ns.Engine.Fields) do truthy(ctx[f[1]] ~= nil, "field " .. f[1] .. " should load") end
   local ref = ns.Config.ReferenceText()
   for _, f in ipairs(ns.Engine.Fields) do truthy(ref:find(f[1], 1, true), "reference mentions " .. f[1]) end
 end)
@@ -273,6 +271,22 @@ test("FieldsOf lists only fields a rule reads, not helpers or constants", functi
     "structured: in condition-key order")
   eq(ns.Engine.FieldsOf({ expr = 'matches("" .. name, "x") and ilvl > 1e3 -- not quality' }), { "name", "ilvl" },
     "fields after .. count; exponents and comments don't")
+end)
+
+-- Tooltips and the tester have no loot slot to ask, so they assume the item
+-- isn't a quest item unless its class says so (a real slot would say).
+test("previews assume non-Quest-class items aren't quest items", function()
+  local ns = T.load()
+  ns.Config.UpdateRule(4, { expr = "not isQuest and quality == POOR" })
+  local grey = T.mock.item(363, { name = "Grey", quality = 0, sellPrice = 1 })
+  local r = ns.Config.TestItem(grey)
+  eq(r.action, "leave"); eq(r.unknowns, nil)
+  eq(r.values, "isQuest false, quality 0")
+  local plain = T.mock.item(364, { name = "Plain", quality = 1, sellPrice = 1 })
+  eq(ns.Config.TestItem(plain).unknowns, nil, "the default rules leave nothing undetermined for a cached item")
+  local uncached = T.mock.item(365, { name = "Later", quality = 0, sellPrice = 1, cached = false })
+  r = ns.Config.TestItem(uncached)
+  eq(r.action, "loot"); truthy(r.unknowns, "not cached: undetermined"); eq(r.cached, false)
 end)
 
 test("tester reports only the deciding rule's values", function()

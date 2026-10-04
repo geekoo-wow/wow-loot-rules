@@ -64,7 +64,9 @@ end
 local loaders = {}
 
 local function loadInstant(ctx)
-  local id, _, _, equipLoc, _, classID, subclassID = API.GetItemInfoInstant(ctx.link or ctx.itemID)
+  local item = ctx.link or ctx.itemID
+  if item == nil then return end -- the game API raises an error on nil
+  local id, _, _, equipLoc, _, classID, subclassID = API.GetItemInfoInstant(item)
   rawset(ctx, "classID", clean(classID))
   rawset(ctx, "subclassID", clean(subclassID))
   rawset(ctx, "equipLoc", clean(equipLoc))
@@ -101,11 +103,20 @@ loaders.owned = function(ctx)
   if ctx.itemID then rawset(ctx, "owned", clean(API.GetItemCount(ctx.itemID))) end
 end
 
--- Only reached for link contexts (tooltips, tester): loot slots set isQuest
--- directly. Items of the Quest class are definitely quest items; for anything
--- else we can't tell (quest starters, quest-flagged drops), so it stays unknown.
+-- Loot slots set isQuest directly, so this runs for previews (tooltips, the
+-- tester) and for slots whose flag was secret. Items of the Quest class are
+-- definitely quest items. For anything else (quest starters, quest-flagged
+-- drops) only a loot slot can tell: a slot leaves it unknown, while a preview
+-- assumes "not a quest item", the same way it assumes a quantity of 1.
+local QUEST_CLASS = 12 -- Enum.ItemClass.Questitem
+
 loaders.isQuest = function(ctx)
-  if ctx.classID == 12 then rawset(ctx, "isQuest", true) end
+  local classID = ctx.classID
+  if classID == QUEST_CLASS then
+    rawset(ctx, "isQuest", true)
+  elseif classID ~= nil and rawget(ctx, "preview") then
+    rawset(ctx, "isQuest", false)
+  end
 end
 
 -- Marks which lazy fields have already been attempted, so an unknown field
@@ -151,9 +162,12 @@ function Context.FromLootSlot(slot, lists)
   return finish(ctx, lists)
 end
 
--- Context for an arbitrary item link: item tooltips and the tester.
+-- Context for an arbitrary item link: item tooltips and the tester. There is
+-- no loot slot behind it, so it is a preview: what dropped is assumed
+-- (`quantity`, default 1, and see loaders.isQuest).
 function Context.FromLink(link, quantity, lists)
   local ctx = {
+    preview = true,
     link = link,
     itemID = itemIDFromLink(link),
     quantity = quantity or 1,

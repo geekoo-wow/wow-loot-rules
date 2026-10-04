@@ -84,7 +84,9 @@ end
 
 _G.C_Item = {}
 
+-- Like the game, these raise an error when called without an item.
 function _G.C_Item.GetItemInfo(item)
+  assert(item ~= nil, "Usage: C_Item.GetItemInfo(itemInfo)")
   local _, t = resolve(item)
   if not t or not t.cached then return nil end
   return t.name, M.link(t.id), t.quality, t.ilvl or 1, t.reqLevel or 0, "Type", "SubType", t.maxStack or 1,
@@ -92,6 +94,7 @@ function _G.C_Item.GetItemInfo(item)
 end
 
 function _G.C_Item.GetItemInfoInstant(item)
+  assert(item ~= nil, "Usage: C_Item.GetItemInfoInstant(itemInfo)")
   local id, t = resolve(item)
   if not id then return nil end
   t = t or {}

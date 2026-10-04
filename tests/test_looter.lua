@@ -12,6 +12,12 @@ local function setupItems()
   M.item(5, { name = "Blue Ring", quality = 3, sellPrice = 5000, bindType = 1 })
 end
 
+local function printedMatching(pattern)
+  local out = {}
+  for _, m in ipairs(T.mock.printed) do if m:find(pattern) then out[#out + 1] = m end end
+  return out
+end
+
 test("loots accepted slots highest-first, leaves junk, closes when done", function()
   local ns = T.load()
   setupItems()
@@ -73,11 +79,31 @@ test("locked slots are never touched", function()
   eq(T.mock.looted, {})
 end)
 
-local function printedMatching(pattern)
-  local out = {}
-  for _, m in ipairs(T.mock.printed) do if m:find(pattern) then out[#out + 1] = m end end
-  return out
-end
+-- "Default when unsure is to loot": a Leave rule must not fire on a guess.
+test("missing data never gets an item left behind", function()
+  local ns = T.load()
+  local M = T.mock
+  M.item(6, { name = "Uncached Reagent", quality = 1, sellPrice = 50, isReagent = true, cached = false })
+  M.item(7, { name = "Odd Trinket", quality = 1, sellPrice = 50 })
+  ns.db.debug = true
+
+  ns.db.ruleset.rules = { { name = "No reagents", when = { expr = "not isReagent" }, action = "leave" } }
+  ns.Rebuild()
+  M.openLoot({ { id = 6 }, { id = 7 } })
+  ns.Looter.frame:Fire("LOOT_READY", false)
+  eq(M.looted, { 1 }, "the trinket is a known non-reagent; the reagent's data is missing")
+  eq(#printedMatching("undetermined: No reagents: condition"), 1)
+  ns.Looter.frame:Fire("LOOT_CLOSED")
+
+  ns.db.ruleset.rules = { { name = "No quest", when = { expr = "not isQuest" }, action = "leave" } }
+  ns.Rebuild()
+  local hidden = {} -- stands in for a value the game hides in combat
+  M.secret[hidden] = true
+  M.openLoot({ { id = 7, quest = hidden }, { id = 7 } })
+  ns.Looter.frame:Fire("LOOT_READY", false)
+  eq(M.looted, { 1 }, "a hidden quest flag is unknown in a real loot slot, not 'false'")
+  eq(#printedMatching("undetermined: No quest: condition"), 1)
+end)
 
 test("dry run loots everything and prints what would have happened", function()
   local ns = T.load()

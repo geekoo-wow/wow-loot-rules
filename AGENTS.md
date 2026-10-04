@@ -16,7 +16,12 @@ for the built-in autoloot. See README.md for behaviour.
 - Item data is read only in `LootRules/Context.lua`, lazily, through `Context.API`.
   New item fields: add a loader there and a condition in `Engine.Conditions`.
 - Missing data is `nil` = "unknown", never a guessed value. Wrap anything
-  read from the game with `clean()` (secret values).
+  read from the game with `clean()` (secret values). An expression that reads
+  an unknown field is itself unknown, whatever it does with the value: the
+  sandbox raises on the read (`Conditions.expr`), so `not x` and `x ~= y`
+  can't turn missing data into a match. The one stated assumption is in
+  previews (`Context.FromLink`: tooltips, tester), which have no loot slot:
+  quantity 1, and only Quest-class items are quest items.
 - Default when unsure is to loot.
 - The rules language is documented from `Engine.Fields` / `Engine.Helpers`;
   a new context field must be added there too (a test enforces it).

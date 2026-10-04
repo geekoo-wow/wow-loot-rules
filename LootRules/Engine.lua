@@ -155,8 +155,11 @@ Conditions.name = {
 --   quality <= COMMON and vendorValue * maxStack < silver(5) and freeSlots <= 4
 --
 -- Compiled once per ruleset build and run in a sandbox that only sees the
--- fields and helpers documented below. A runtime error (usually comparing a
--- field that is unknown/nil) makes the condition unknown rather than false.
+-- fields and helpers documented below. Reading a field whose value is unknown
+-- (nil) makes the whole condition unknown, however it is used: `not isReagent`
+-- and `bindType ~= 1` must not turn missing data into a definite answer. Lua's
+-- short-circuiting still applies, so a field that is never reached doesn't
+-- count. Any other runtime error makes the condition unknown as well.
 -- Fields and Helpers double as the in-game quick reference, so every field
 -- the context can load must be listed here.
 -- ---------------------------------------------------------------------------
@@ -175,7 +178,7 @@ Engine.Fields = {
   { "equipLoc",    "string",  "equip slot, e.g. \"INVTYPE_HEAD\"; \"\" if not equippable" },
   { "bindType",    "number",  "0 none, 1 on pickup, 2 on equip, 3 on use, 4 quest" },
   { "expansionID", "number",  "0 classic, 1 TBC, 2 Wrath, …" },
-  { "isQuest",     "boolean", "quest item (from the loot window)" },
+  { "isQuest",     "boolean", "quest item (outside a loot window: only items of the Quest class)" },
   { "isReagent",   "boolean", "crafting reagent" },
   { "freeSlots",   "number",  "free general-purpose bag slots right now" },
   { "owned",       "number",  "how many of this item you already carry" },
@@ -340,22 +343,35 @@ Conditions.expr = {
     local _, err = compileExpr(spec)
     if err then return err end
   end,
-  compile = function(spec) return (compileExpr(spec)) end,
-  eval = function(compiled, ctx)
-    local env = setmetatable({}, {
+  -- Returns run(ctx) -> true|false|nil. The sandbox environment is built once
+  -- and pointed at whichever item is being evaluated.
+  compile = function(spec)
+    local fn = compileExpr(spec)
+    local ctx
+    local function inList(listName)
+      if ctx.itemID == nil then error("itemID is unknown", 0) end
+      return ctx.inList(listName)
+    end
+    setfenv(fn, setmetatable({}, {
       __index = function(_, k)
         local h = ExprHelpers[k]
         if h ~= nil then return h end
-        if k == "inList" then return ctx.inList end
-        return ctx[k]
+        if k == "inList" then return inList end
+        local v = ctx[k]
+        if v == nil then error(k .. " is unknown", 0) end
+        return v
       end,
-      __newindex = function() error("expressions cannot assign", 2) end,
-    })
-    setfenv(compiled, env)
-    local ok, result = pcall(compiled)
-    if not ok then return nil end
-    return not not result
+      __newindex = readOnly,
+    }))
+    return function(item)
+      ctx = item
+      local ok, result = pcall(fn)
+      ctx = nil
+      if not ok then return nil end
+      return not not result
+    end
   end,
+  eval = function(run, ctx) return run(ctx) end,
 }
 
 -- Render a structured `when` table as an equivalent expression, so rules
