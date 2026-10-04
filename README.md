@@ -146,6 +146,9 @@ Rules are stored in `LootRulesDB.ruleset` in SavedVariables. Rules written by
 hand there may also use the structured form
 (`when = { quality = { max = 0 }, vendorValue = { max = 9 } }`); the settings
 panel shows these as the equivalent expression and saves them back as one.
+A rule the addon can't make sense of (unknown condition, bad expression,
+unknown action) is reported in chat at login, marked in red in the rule list
+and skipped; the other rules keep working.
 
 ## Known limitations
 

@@ -45,15 +45,35 @@ local function deepCopy(v)
 end
 ns.DeepCopy = deepCopy
 
--- Fill in missing keys from defaults without clobbering user settings.
--- The ruleset is treated as one unit: if the user has one, it's theirs.
+-- Fill in missing keys from defaults without clobbering user settings; a
+-- table setting that isn't a table (hand-edited SavedVariables) counts as
+-- missing. The ruleset is treated as one unit: if the user has one, it's theirs.
 local function mergeDefaults(db, defaults)
   for k, v in pairs(defaults) do
-    if db[k] == nil then
+    if db[k] == nil or (type(v) == "table" and type(db[k]) ~= "table") then
       db[k] = deepCopy(v)
-    elseif type(v) == "table" and type(db[k]) == "table" and k ~= "ruleset" then
+    elseif type(v) == "table" and k ~= "ruleset" then
       mergeDefaults(db[k], v)
     end
+  end
+end
+
+-- SavedVariables can be written by hand. What is wrong with a rule is
+-- Engine.Compile's to report; this only establishes the shape the migration
+-- and the settings UI rely on: a list of rule tables, each with a name.
+local function normalizeRules(db)
+  local ruleset = db.ruleset
+  if type(ruleset) ~= "table" then
+    db.ruleset = nil -- the defaults fill it in
+    return
+  end
+  if type(ruleset.rules) ~= "table" then ruleset.rules = {} end
+  local rules = ruleset.rules
+  for i = #rules, 1, -1 do
+    if type(rules[i]) ~= "table" then table.remove(rules, i) end
+  end
+  for i, rule in ipairs(rules) do
+    if type(rule.name) ~= "string" then rule.name = "Rule " .. i end
   end
 end
 
@@ -133,7 +153,11 @@ local function rewriteFields(when)
     end
   end
   if #terms > 0 then
+    -- WhenToExpr returns a lone expression as written; ANDed with the new
+    -- terms it needs parentheses (it may contain an `or`).
+    local loneExpr = when.expr ~= nil and next(when, next(when)) == nil
     local rest = ns.Engine.WhenToExpr(when)
+    if loneExpr then rest = ns.Engine.Parenthesize(rest) end
     local expr = table.concat(terms, " and ")
     if rest ~= "true" then expr = rest .. " and " .. expr end
     for k in pairs(when) do when[k] = nil end
@@ -170,8 +194,9 @@ local function migrate(db)
 end
 
 function ns.InitDB()
-  _G.LootRulesDB = _G.LootRulesDB or {}
+  if type(_G.LootRulesDB) ~= "table" then _G.LootRulesDB = {} end
   local db = _G.LootRulesDB
+  normalizeRules(db)
   migrate(db)
   mergeDefaults(db, ns.DEFAULTS)
   ns.db = db

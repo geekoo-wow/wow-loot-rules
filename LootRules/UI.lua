@@ -499,6 +499,7 @@ local function BuildRules()
   condStatus:SetWordWrap(false)
 
   condEdit:SetScript("OnTextChanged", function(self)
+    if not selected then return condStatus:SetText("") end
     local err = Config.Validate(self:GetText())
     condStatus:SetText(err and (COLOR_ERR .. err .. "|r") or (COLOR_LOOT .. "Condition OK|r"))
   end)

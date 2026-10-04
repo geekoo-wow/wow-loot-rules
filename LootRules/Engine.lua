@@ -62,6 +62,15 @@ local function isSet(spec)
   return true
 end
 
+-- A table's keys in a stable order, whatever their types (hand-written rules
+-- can hold anything).
+local function sortedKeys(t)
+  local keys = {}
+  for k in pairs(t) do keys[#keys + 1] = k end
+  table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+  return keys
+end
+
 -- Lowercase a Lua pattern for case-insensitive matching, leaving the character
 -- after a % alone: there case is meaning (%S is "anything but %s").
 local function lowerPattern(pattern)
@@ -118,6 +127,7 @@ Conditions.itemID     = setField("itemID")
 Conditions.classID    = setField("classID")       -- Enum.ItemClass (2 weapon, 4 armor, 7 tradegoods, 15 misc...)
 Conditions.subclassID = setField("subclassID")
 Conditions.bindType   = setField("bindType")      -- 0 none, 1 BoP, 2 BoE, 3 BoU, 4 quest
+Conditions.expansionID = setField("expansionID")
 Conditions.equipLoc   = setField("equipLoc")
 Conditions.quest      = boolField("isQuest")
 Conditions.reagent    = boolField("isReagent")
@@ -303,14 +313,11 @@ end
 -- Fields a rule's `when` reads, in a stable order; used to show only the
 -- values that decided an item.
 function Engine.FieldsOf(when)
-  local keys = {}
-  for k in pairs(when or {}) do keys[#keys + 1] = k end
-  table.sort(keys)
   local out, seen = {}, {}
   local function add(f)
     if f and not seen[f] then seen[f] = true; out[#out + 1] = f end
   end
-  for _, k in ipairs(keys) do
+  for _, k in ipairs(sortedKeys(when or {})) do
     local cond = Conditions[k]
     if k == "expr" and type(when.expr) == "string" then
       for _, f in ipairs(referencedFields(when.expr)) do add(f) end
@@ -376,22 +383,33 @@ Conditions.expr = {
 
 -- Render a structured `when` table as an equivalent expression, so rules
 -- written as tables in SavedVariables can be shown and edited in the UI.
+-- A condition the engine doesn't understand renders as `false`: its rule is
+-- dropped at compile time, so it never matches either.
 local function literal(v)
   if type(v) == "string" then return string.format("%q", v) end
   return tostring(v)
 end
 
+-- "(expr)"; the closing parenthesis goes on its own line if a trailing
+-- comment could swallow it.
+local function parenthesize(expr)
+  return "(" .. expr .. (expr:find("--", 1, true) and "\n)" or ")")
+end
+Engine.Parenthesize = parenthesize
+
 function Engine.WhenToExpr(when)
-  local keys = {}
-  for k in pairs(when or {}) do keys[#keys + 1] = k end
-  table.sort(keys)
+  local keys = sortedKeys(when or {})
   local parts = {}
   for _, k in ipairs(keys) do
     local spec, cond = when[k], Conditions[k]
     local kind = cond and cond.kind or k
     local f = cond and cond.field
     local p
-    if kind == "range" then
+    if k == "expr" and type(spec) == "string" then
+      p = #keys == 1 and spec or parenthesize(spec)
+    elseif not cond or cond.check(spec) then
+      p = "--[[" .. tostring(k) .. "?]] false"
+    elseif kind == "range" then
       if type(spec) == "number" then
         p = f .. " == " .. spec
       else
@@ -412,12 +430,8 @@ function Engine.WhenToExpr(when)
       local sub = {}
       for i = 1, #names do sub[i] = "inList(" .. literal(names[i]) .. ")" end
       p = #sub == 1 and sub[1] or "(" .. table.concat(sub, " or ") .. ")"
-    elseif k == "name" then
+    else -- name
       p = "matches(name, " .. literal(spec) .. ")"
-    elseif k == "expr" then
-      p = #keys == 1 and spec or "(" .. spec .. ")"
-    else
-      p = "--[[" .. tostring(k) .. "?]] true"
     end
     parts[#parts + 1] = p
   end
@@ -428,11 +442,49 @@ end
 -- Compilation: validate a ruleset once, produce a closure list for evaluation
 -- ---------------------------------------------------------------------------
 
+-- Validates one rule, passing each problem to fail(message). Returns the
+-- rule's conditions, ready to evaluate (incomplete if anything failed).
+local function compileConditions(rule, fail)
+  local conds = {}
+  if type(rule) ~= "table" then
+    fail("must be a table")
+    return conds
+  end
+  if not Engine.ACTIONS[rule.action] then
+    fail("unknown action '" .. tostring(rule.action) .. "'")
+  end
+  if rule.onUnknown ~= nil and rule.onUnknown ~= "skip" and rule.onUnknown ~= "match" then
+    fail("onUnknown must be 'skip' or 'match'")
+  end
+  if type(rule.when) ~= "table" then
+    fail("'when' must be a table")
+    return conds
+  end
+
+  -- Sorted keys so evaluation order (and the trace) is deterministic.
+  for _, k in ipairs(sortedKeys(rule.when)) do
+    local spec = rule.when[k]
+    local cond = Conditions[k]
+    local name = k == "expr" and "condition" or tostring(k)
+    local err = cond and cond.check(spec)
+    if not cond then
+      fail("unknown condition '" .. name .. "'")
+    elseif err then
+      fail(name .. " " .. err)
+    else
+      conds[#conds + 1] = { name = name, eval = cond.eval, spec = cond.compile and cond.compile(spec) or spec }
+    end
+  end
+  return conds
+end
+
 -- Returns compiled, errors. `compiled` is always usable: rules with errors are
 -- dropped (and reported) so one typo doesn't disable the whole addon.
+-- `errors` is an array of messages; errors.rules[i] is the first problem with
+-- rule i, without the "rule i (name):" prefix.
 function Engine.Compile(ruleset)
   local compiled = { rules = {}, default = "loot" }
-  local errors = {}
+  local errors = { rules = {} }
 
   if type(ruleset) ~= "table" then
     errors[#errors + 1] = "ruleset is not a table"
@@ -447,53 +499,25 @@ function Engine.Compile(ruleset)
     end
   end
 
-  for i, rule in ipairs(ruleset.rules or {}) do
-    local label = string.format("rule %d (%s)", i, tostring(rule.name or "unnamed"))
-    local ok = true
-    local conds = {}
+  if ruleset.rules ~= nil and type(ruleset.rules) ~= "table" then
+    errors[#errors + 1] = "rules is not a list"
+    return compiled, errors
+  end
 
-    if not Engine.ACTIONS[rule.action] then
-      errors[#errors + 1] = label .. ": unknown action '" .. tostring(rule.action) .. "'"
+  for i, rule in ipairs(ruleset.rules or {}) do
+    local name = type(rule) == "table" and rule.name or nil
+    local label = string.format("rule %d (%s)", i, tostring(name or "unnamed"))
+    local ok = true
+    local conds = compileConditions(rule, function(message)
       ok = false
-    end
-    if rule.onUnknown ~= nil and rule.onUnknown ~= "skip" and rule.onUnknown ~= "match" then
-      errors[#errors + 1] = label .. ": onUnknown must be 'skip' or 'match'"
-      ok = false
-    end
-    if type(rule.when) ~= "table" then
-      errors[#errors + 1] = label .. ": 'when' must be a table"
-      ok = false
-    else
-      -- Sorted keys so evaluation order (and the trace) is deterministic.
-      local keys = {}
-      for k in pairs(rule.when) do keys[#keys + 1] = k end
-      table.sort(keys)
-      for _, k in ipairs(keys) do
-        local spec = rule.when[k]
-        local cond = Conditions[k]
-        if not cond then
-          errors[#errors + 1] = label .. ": unknown condition '" .. tostring(k) .. "'"
-          ok = false
-        else
-          local err = cond.check(spec)
-          if err then
-            errors[#errors + 1] = label .. ": " .. (k == "expr" and "condition" or k) .. " " .. err
-            ok = false
-          else
-            conds[#conds + 1] = {
-              name = k == "expr" and "condition" or k,
-              eval = cond.eval,
-              spec = cond.compile and cond.compile(spec) or spec,
-            }
-          end
-        end
-      end
-    end
+      errors[#errors + 1] = label .. ": " .. message
+      errors.rules[i] = errors.rules[i] or message
+    end)
 
     if ok and rule.enabled ~= false then
       compiled.rules[#compiled.rules + 1] = {
         index = i,
-        name = rule.name or ("rule " .. i),
+        name = name or ("rule " .. i),
         action = rule.action,
         onUnknown = rule.onUnknown or "skip",
         conds = conds,

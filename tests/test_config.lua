@@ -55,6 +55,21 @@ test("structured rules render as equivalent expressions", function()
   eq(ns.Engine.WhenToExpr({ list = "blacklist" }), 'inList("blacklist")')
   eq(ns.Engine.WhenToExpr({ name = "^chip" }), 'matches(name, "^chip")')
   eq(ns.Engine.WhenToExpr({}), "true")
+  eq(ns.Engine.WhenToExpr({ expr = "isQuest or isReagent", quality = 0 }), "(isQuest or isReagent) and quality == 0")
+  eq(ns.Engine.WhenToExpr({ expr = "isQuest -- keep", quality = 0 }), "(isQuest -- keep\n) and quality == 0",
+    "a trailing comment can't swallow the parenthesis")
+end)
+
+-- A rule with a condition the engine doesn't understand is dropped, so it
+-- never matches; shown in the editor (and saved from it) it must not turn
+-- into a rule that does.
+test("conditions the engine doesn't understand render as false", function()
+  local ns = T.load()
+  eq(ns.Engine.WhenToExpr({ colour = "red", quality = 0 }), "--[[colour?]] false and quality == 0")
+  eq(ns.Engine.WhenToExpr({ quality = true }), "--[[quality?]] false")
+  eq(ns.Config.Validate(ns.Engine.WhenToExpr({ colour = "red", quality = 0 })), nil)
+  eq(ns.Config.RuleExpr({ when = { expr = 5 } }), "--[[expr?]] false")
+  eq(ns.Config.RuleExpr({ when = "quality == 0" }), "true", "no usable conditions at all")
 end)
 
 test("rendered expressions behave like the structured rule", function()
@@ -127,6 +142,19 @@ test("invalid updates change nothing", function()
   eq(ns.Config.Rules()[4].name, "Cheap junk")
   eq(ns.Config.RuleExpr(ns.Config.Rules()[4]), before)
   truthy(ns.Config.UpdateRule(4, { action = "burn" }))
+  truthy(ns.Config.UpdateRule(4, { name = "renamed", onUnknown = "sometimes" }))
+  eq(ns.Config.Rules()[4].name, "Cheap junk")
+  eq(ns.Config.Rules()[4].onUnknown, nil)
+  eq(ns.Config.UpdateRule(99, { name = "x" }), "no such rule")
+  eq(#ns.compileErrors, 0)
+end)
+
+test("onUnknown is stored only when it isn't the default", function()
+  local ns = T.load()
+  eq(ns.Config.UpdateRule(4, { onUnknown = "match" }), nil)
+  eq(ns.Config.Rules()[4].onUnknown, "match")
+  eq(ns.Config.UpdateRule(4, { onUnknown = "skip" }), nil)
+  eq(ns.Config.Rules()[4].onUnknown, nil)
 end)
 
 test("new rules never match until edited", function()
@@ -145,6 +173,43 @@ test("rule errors from hand-edited SavedVariables are reported per rule", functi
   eq(ns.Config.RuleError(1), nil)
   eq(ns.Config.RuleError(2), "condition unknown name 'qualty'")
   truthy(printedContains("rule error"))
+  truthy(printedContains("rule 2 (typo): condition unknown name 'qualty'"))
+end)
+
+test("rule errors don't depend on what the rule is called", function()
+  local ns = T.load({ ruleset = { rules = {
+    { name = "Junk (cheap", when = { expr = "qualty == 0" }, action = "leave" },
+    { name = "a) b", when = { expr = "quality == 0" }, action = "burn" },
+  } } })
+  eq(ns.Config.RuleError(1), "condition unknown name 'qualty'")
+  eq(ns.Config.RuleError(2), "unknown action 'burn'")
+end)
+
+-- SavedVariables are plain Lua that people edit by hand (the README invites
+-- it). Whatever is in there, the addon has to load and the panels have to draw.
+test("hand-edited SavedVariables: malformed rulesets still load", function()
+  local ns = T.load({ version = 5, ruleset = { rules = {
+    7,
+    { when = { expr = "quality == POOR" }, action = "leave", enabled = false }, -- no name
+    "junk",
+    { name = "Kept", when = { expr = "quality == POOR" }, action = "leave" },
+  } } })
+  local rules = ns.Config.Rules()
+  eq(#rules, 2, "entries that aren't rules are dropped")
+  eq(rules[1].name, "Rule 1"); eq(rules[2].name, "Kept")
+  eq(#ns.compileErrors, 0)
+  for _, p in ipairs(ns.UI.panels) do p:Show(); p:Refresh() end
+  ns.UI.SelectRule(1)
+
+  ns = T.load({ version = 5, ruleset = { default = "leave" } })
+  eq(ns.Config.Rules(), {}, "a ruleset without rules has none")
+  eq(ns.Config.DefaultAction(), "leave")
+  eq(ns.Config.AddRule(), 1)
+
+  ns = T.load({ version = 5, ruleset = "none", lists = { blacklist = 5 } })
+  eq(#ns.Config.Rules(), #ns.DEFAULTS.ruleset.rules, "not a ruleset at all: back to the defaults")
+  eq(ns.Config.AddToList("blacklist", 12), 12)
+  eq(ns.Config.ListItems("whitelist"), {})
 end)
 
 test("default action can be switched", function()
@@ -219,6 +284,16 @@ test("v2 SavedVariables: unedited old defaults upgrade, edited rules keep their 
   eq(rules[4].when, { vendorValue = { max = 5 } })
   eq(rules[5].when, { expr = "quality <= 0 and (vendorValue * quantity) >= 10 and (vendorValue * quantity) <= 100" })
   eq(ns.db.version, 5)
+end)
+
+test("migration keeps the precedence of an expression it adds terms to", function()
+  local ns = T.load({ version = 2, ruleset = { default = "loot", rules = {
+    { name = "Mixed", when = { expr = "quality == POOR or quality == COMMON", stackValue = { max = 100 } }, action = "leave" },
+  } } })
+  eq(ns.db.ruleset.rules[1].when,
+    { expr = "(quality == POOR or quality == COMMON) and (vendorValue * quantity) <= 100" })
+  local pricey = T.mock.item(351, { name = "Pricey Grey", quality = 0, sellPrice = 5000 })
+  eq(ns.Config.TestItem(pricey).action, "loot", "the value limit applies to greys too")
 end)
 
 test("v3 SavedVariables: lootVendorPrice is rewritten and still evaluates the same", function()

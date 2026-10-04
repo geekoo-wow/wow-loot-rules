@@ -24,10 +24,15 @@ for the built-in autoloot. See README.md for behaviour.
   quantity 1, and only Quest-class items are quest items.
 - Default when unsure is to loot.
 - The rules language is documented from `Engine.Fields` / `Engine.Helpers`;
-  a new context field must be added there too (a test enforces it).
+  a new context field must be added there too (tests enforce both this and
+  the structured condition).
 - Settings UI: `UI.lua` only draws widgets; every config change goes through
   `Config.lua`, which is what the tests exercise. `tests/test_ui.lua` builds
   the panels against stub widgets (catches wiring errors, not layout).
+- SavedVariables are hand-editable, so nothing read from them may raise:
+  `Core.lua` normalizes the shape at load, `Engine.Compile` reports bad rules
+  and drops them, `Engine.WhenToExpr` renders what it can't understand as
+  `false`.
 - `Tooltip.lua` only hooks tooltips; the line's content comes from
   `Config.TooltipLine`. Bag contents are read in `Context.ScanBags` and
   shaped for the picker by `Config.BagItems`.

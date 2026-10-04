@@ -175,6 +175,15 @@ test("matches() ignores case but keeps pattern classes intact", function()
   eq(run({ expr = 'matches(name, "^TWO %a+$")' }, two), "leave", "literal text is case-insensitive")
 end)
 
+test("every field also has a structured condition", function()
+  local ns = T.load()
+  local byField = { name = true } -- `name` is a pattern condition of its own
+  for _, cond in pairs(ns.Engine.Conditions) do
+    if cond.field then byField[cond.field] = true end
+  end
+  for _, f in ipairs(ns.Engine.Fields) do T.truthy(byField[f[1]], "no structured condition for " .. f[1]) end
+end)
+
 test("expressions cannot modify the math library", function()
   local ns = T.load()
   local link = T.mock.item(124, { name = "X", quality = 1, sellPrice = 1 })
@@ -212,6 +221,26 @@ test("invalid rules are reported and dropped, valid ones still run", function()
   eq(#errors, 4)
   eq(#compiled.rules, 1)
   eq(compiled.rules[1].name, "good")
+  eq(errors.rules[1], "unknown action 'yeet'")
+  eq(errors.rules[4], "condition unexpected symbol near ')'")
+  eq(errors.rules[5], nil)
+end)
+
+test("compiling hand-written garbage reports errors instead of raising them", function()
+  local ns = T.load()
+  local compiled, errors = ns.Engine.Compile({ rules = {
+    5,
+    { name = "mixed keys", when = { "quality == 0", expr = "true" }, action = "leave" },
+    { name = "no when", action = "leave" },
+    { name = "good", when = { quality = 0 }, action = "leave" },
+  } })
+  eq(errors.rules[1], "must be a table")
+  eq(errors.rules[2], "unknown condition '1'")
+  eq(errors.rules[3], "'when' must be a table")
+  eq(#compiled.rules, 1)
+  compiled, errors = ns.Engine.Compile({ default = "leave", rules = "all of them" })
+  eq(#errors, 1); eq(errors[1], "rules is not a list")
+  eq(compiled.default, "leave"); eq(#compiled.rules, 0)
 end)
 
 test("disabled rules are skipped", function()

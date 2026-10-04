@@ -14,9 +14,8 @@ function Config.Rules() return rules() end
 
 -- The expression shown in the editor for a rule, whatever form it's stored in.
 function Config.RuleExpr(rule)
-  local when = rule.when or {}
-  local only = next(when)
-  if only == "expr" and next(when, only) == nil then return when.expr end
+  local when = type(rule.when) == "table" and rule.when or {}
+  if type(when.expr) == "string" and next(when, next(when)) == nil then return when.expr end
   return ns.Engine.WhenToExpr(when)
 end
 
@@ -33,6 +32,9 @@ function Config.UpdateRule(i, fields)
   local rule = rules()[i]
   if not rule then return "no such rule" end
   if fields.action ~= nil and not ns.Engine.ACTIONS[fields.action] then return "unknown action" end
+  if fields.onUnknown ~= nil and fields.onUnknown ~= "skip" and fields.onUnknown ~= "match" then
+    return "onUnknown must be 'skip' or 'match'"
+  end
   if fields.expr ~= nil then
     local err = Config.Validate(fields.expr)
     if err then return err end
@@ -43,7 +45,7 @@ function Config.UpdateRule(i, fields)
   end
   if fields.action ~= nil then rule.action = fields.action end
   if fields.expr ~= nil then rule.when = { expr = fields.expr } end
-  if fields.onUnknown ~= nil then rule.onUnknown = fields.onUnknown ~= "skip" and fields.onUnknown or nil end
+  if fields.onUnknown ~= nil then rule.onUnknown = fields.onUnknown == "match" and "match" or nil end
   ns.Rebuild()
 end
 
@@ -87,12 +89,10 @@ end
 
 function Config.DefaultAction() return ns.db.ruleset.default or "loot" end
 
--- Compile errors for one rule (by index), as a single string or nil.
+-- The first compile error for one rule (by index), or nil.
 function Config.RuleError(i)
-  local prefix = string.format("rule %d ", i)
-  for _, e in ipairs(ns.compileErrors or {}) do
-    if e:sub(1, #prefix) == prefix then return (e:gsub("^rule %d+ %b(): ", "")) end
-  end
+  local errors = ns.compileErrors
+  return errors and errors.rules[i]
 end
 
 -- ---- lists -----------------------------------------------------------------
