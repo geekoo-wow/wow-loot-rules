@@ -8,7 +8,7 @@ ns.name = ADDON or "LootRules"
 -- Forever beta currently fails to load SavedVariables at startup; with these
 -- defaults the addon still does something sensible after every restart.
 ns.DEFAULTS = {
-  version = 5,
+  version = 6,
   enabled = true,
   dryRun = false,        -- evaluate and print decisions, but loot everything
   debug = false,         -- print every decision, with the rule that made it
@@ -32,8 +32,10 @@ ns.DEFAULTS = {
       { name = "Cheap junk",
         when = { expr = "quality == POOR and vendorValue * maxStack < silver(1)" },
         action = "leave" },
+      -- Only when the drop would take a new slot: loot joins the stacks
+      -- already in the bags, so what fits into one costs nothing to pick up.
       { name = "Tight bags",
-        when = { expr = "quality <= COMMON and vendorValue * maxStack < silver(5) and freeSlots <= 4" },
+        when = { expr = "quality <= COMMON and vendorValue * maxStack < silver(5) and freeSlots <= 4 and quantity > stackRoom" },
         action = "leave" },
     },
   },
@@ -107,9 +109,10 @@ local OLD_DEFAULTS = {
     { expr = "quality == POOR and stackVendorPrice < silver(1)" },    -- v3-v4
   },
   ["Tight bags"] = {
-    { quality = { max = 1 }, stackValue = { max = 499 }, freeSlots = { max = 4 } },
-    { expr = "quality <= COMMON and stackValue < silver(5) and freeSlots <= 4" },
-    { expr = "quality <= COMMON and stackVendorPrice < silver(5) and freeSlots <= 4" },
+    { quality = { max = 1 }, stackValue = { max = 499 }, freeSlots = { max = 4 } },        -- v1
+    { expr = "quality <= COMMON and stackValue < silver(5) and freeSlots <= 4" },           -- v2
+    { expr = "quality <= COMMON and stackVendorPrice < silver(5) and freeSlots <= 4" },     -- v3-v4
+    { expr = "quality <= COMMON and vendorValue * maxStack < silver(5) and freeSlots <= 4" }, -- v5
   },
 }
 
@@ -185,7 +188,7 @@ local function migrate(db)
   end
 
   local rules = db.ruleset and db.ruleset.rules
-  if type(rules) == "table" and (db.version or 1) < 5 then
+  if type(rules) == "table" and (db.version or 1) < 6 then
     local current = {}
     for _, r in ipairs(ns.DEFAULTS.ruleset.rules) do current[r.name] = r end
     for _, rule in ipairs(rules) do

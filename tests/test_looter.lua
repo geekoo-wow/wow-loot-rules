@@ -115,6 +115,24 @@ test("quest items are always looted", function()
   eq(T.mock.looted, { 1 })
 end)
 
+test("tight bags: a drop that joins a stack you carry is looted, one that needs a slot is left", function()
+  local ns = T.load()
+  local M = T.mock
+  M.item(8, { name = "Light Leather", quality = 1, sellPrice = 15, maxStack = 20 })
+  ns.db.debug = true
+  M.bags.free = 2
+  M.bagItems = { [0] = { [1] = { id = 8, count = 17 } } }
+  M.openLoot({ { id = 8, qty = 3 } })
+  ns.Looter.frame:Fire("LOOT_READY", false)
+  eq(M.looted, { 1 }, "three fit into the stack of 17")
+  ns.Looter.frame:Fire("LOOT_CLOSED")
+  M.openLoot({ { id = 8, qty = 4 } })
+  ns.Looter.frame:Fire("LOOT_READY", false)
+  eq(M.looted, {}, "the fourth unit would take a slot")
+  eq(#printedMatching("left.*Light Leather.* x4 — #5 Tight bags "
+    .. "%[quality 1, vendorValue 15c, maxStack 20, freeSlots 2, quantity 4, stackRoom 3%]"), 1)
+end)
+
 test("locked slots are never touched", function()
   local ns = T.load()
   setupItems()

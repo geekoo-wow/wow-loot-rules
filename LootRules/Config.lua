@@ -271,7 +271,8 @@ function Config.ReferenceText()
     { "classID == 4 and subclassID == 4 and quality <= UNCOMMON", "plate armor up to green" },
     { "classID == 7 and owned >= 100", "trade goods you already have 100+ of" },
     { "matches(name, \"^chipped\") or matches(name, \"broken\")", "items by name" },
-    { "freeSlots <= 2 and quality < UNCOMMON", "anything below green when bags are almost full" },
+    { "freeSlots <= 2 and quality < UNCOMMON and quantity > stackRoom",
+      "anything below green that needs a new bag slot while bags are almost full" },
     { "vendorValue >= gold(1)", "anything worth 1g+ per unit (use with Loot)" },
   }
   for _, e in ipairs(examples) do

@@ -103,6 +103,50 @@ loaders.owned = function(ctx)
   if ctx.itemID then rawset(ctx, "owned", clean(API.GetItemCount(ctx.itemID))) end
 end
 
+-- The bags loot lands in: the backpack and the equipped bags, plus the
+-- reagent bag on clients that have one.
+local function bagIndices()
+  local lastBag = _G.NUM_BAG_SLOTS or 4
+  local reagentBag = _G.Enum and _G.Enum.BagIndex and _G.Enum.BagIndex.ReagentBag
+  local bags = {}
+  for bag = 0, lastBag do bags[#bags + 1] = bag end
+  if reagentBag and reagentBag > lastBag then bags[#bags + 1] = reagentBag end
+  return bags
+end
+
+-- How many more units of the item fit into the stacks of it already in the
+-- bags, i.e. what can be looted without taking a new slot: loot joins a
+-- partial stack before it takes an empty slot, in any bag, so every bag is
+-- scanned. 0 when no stack of it is carried, which needs no item data.
+-- Unknown when a slot can't be read (secret values): a stack we can't see
+-- could absorb the drop, and guessing would get it left behind.
+local function countStackRoom(ctx)
+  local id = ctx.itemID
+  if id == nil then return nil end
+  local room = 0
+  for _, bag in ipairs(bagIndices()) do
+    local numSlots = clean(API.GetContainerNumSlots(bag))
+    if numSlots == nil then return nil end
+    for slot = 1, numSlots do
+      local info = API.GetContainerItemInfo(bag, slot) -- nil: an empty slot
+      if info ~= nil then
+        local slotID = type(info) == "table" and clean(info.itemID) or nil
+        if slotID == nil then return nil end
+        if slotID == id then
+          local count, maxStack = clean(info.stackCount), ctx.maxStack
+          if count == nil or maxStack == nil then return nil end
+          room = room + math.max(0, maxStack - count)
+        end
+      end
+    end
+  end
+  return room
+end
+
+loaders.stackRoom = function(ctx)
+  rawset(ctx, "stackRoom", countStackRoom(ctx))
+end
+
 -- Loot slots set isQuest directly, so this runs for previews (tooltips, the
 -- tester) and for slots whose flag was secret. Items of the Quest class are
 -- definitely quest items. For anything else (quest starters, quest-flagged
@@ -179,13 +223,7 @@ end
 -- { itemID, link, count, icon, quality }. Secret or missing entries are skipped.
 function Context.ScanBags()
   local out = {}
-  local lastBag = _G.NUM_BAG_SLOTS or 4
-  local reagentBag = _G.Enum and _G.Enum.BagIndex and _G.Enum.BagIndex.ReagentBag
-  local bags = {}
-  for bag = 0, lastBag do bags[#bags + 1] = bag end
-  if reagentBag and reagentBag > lastBag then bags[#bags + 1] = reagentBag end
-
-  for _, bag in ipairs(bags) do
+  for _, bag in ipairs(bagIndices()) do
     for slot = 1, clean(API.GetContainerNumSlots(bag)) or 0 do
       local info = API.GetContainerItemInfo(bag, slot)
       if type(info) == "table" then

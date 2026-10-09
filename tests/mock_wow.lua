@@ -6,7 +6,7 @@ local M = {}
 
 M.items = {}      -- [itemID] = { name, quality, ilvl, reqLevel, maxStack, sellPrice, classID, subclassID, bindType, isReagent, cached }
 M.bags = { free = 20 }
-M.bagItems = {}   -- [bag] = { [slot] = { id = n, count = n } }
+M.bagItems = {}   -- [bag] = { [slot] = { id = n, count = n } }; bag 5 is the reagent bag
 M.owned = {}      -- [itemID] = count
 M.cvars = { autoLootDefault = "0" }
 M.keys = {}       -- modifier keys held down: SHIFT / CTRL / ALT = true
@@ -50,6 +50,7 @@ end
 _G.Enum = {
   LootSlotType = { None = 0, Item = 1, Money = 2, Currency = 3 },
   TooltipDataType = { Item = 0 },
+  BagIndex = { ReagentBag = 5 },
 }
 _G.NUM_BAG_SLOTS = 4
 

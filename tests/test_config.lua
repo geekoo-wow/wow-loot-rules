@@ -250,6 +250,31 @@ test("vendorValue and maxStack load from item data", function()
   eq(ctx.maxStack, 10)
 end)
 
+test("stackRoom: how many more units fit into the stacks already in the bags", function()
+  local ns = T.load()
+  local M = T.mock
+  local link = M.item(345, { name = "Light Leather", quality = 1, sellPrice = 15, maxStack = 20 })
+  local function room(item) return ns.Config.TestItem(item or link).ctx.stackRoom end
+  eq(room(), 0, "none carried")
+  M.bagItems = {
+    [0] = { [1] = { id = 345, count = 17 }, [2] = { id = 346, count = 1 } },
+    [2] = { [3] = { id = 345, count = 20 }, [4] = { id = 345, count = 15 } },
+    [5] = { [1] = { id = 345, count = 19 } },
+  }
+  eq(room(), 3 + 5 + 1, "partial stacks in any bag, the reagent bag included; a full one adds nothing")
+  local uncached = M.item(347, { name = "Later", quality = 1, sellPrice = 15, maxStack = 20, cached = false })
+  eq(room(uncached), 0, "no stack to join: known without item data")
+  M.bagItems[0][2] = { id = 347, count = 2 }
+  eq(room(uncached), nil, "a stack to join, but how much it holds is unknown")
+  M.bagItems[0][2] = { id = 345, count = 13 }
+  M.secret[13] = true
+  eq(room(), nil, "a hidden stack count")
+  M.bagItems[0][2] = { id = 999 }
+  M.secret[999] = true
+  eq(room(), nil, "a slot whose item is hidden could hold a stack of it")
+  eq(ns.Context.FromLink(nil, 1, ns.db.lists).stackRoom, nil, "no item to look for")
+end)
+
 test("default junk rule judges a full stack, not the drop (41c x 10 stack)", function()
   local ns = T.load()
   local link = T.mock.item(342, { name = "Stackable Grey", quality = 0, sellPrice = 41, maxStack = 10 })
@@ -278,12 +303,26 @@ test("v2 SavedVariables: unedited old defaults upgrade, edited rules keep their 
   } } })
   local rules = ns.db.ruleset.rules
   eq(rules[1].when.expr, "quality == POOR and vendorValue * maxStack < silver(1)")
-  eq(rules[2].when.expr, "quality <= COMMON and vendorValue * maxStack < silver(5) and freeSlots <= 4")
+  eq(rules[2].when.expr,
+    "quality <= COMMON and vendorValue * maxStack < silver(5) and freeSlots <= 4 and quantity > stackRoom")
   eq(rules[3].when.expr, "vendorValue > 10 and (vendorValue * quantity) < silver(2) and mysellPriceX",
     "whole identifiers only")
   eq(rules[4].when, { vendorValue = { max = 5 } })
   eq(rules[5].when, { expr = "quality <= 0 and (vendorValue * quantity) >= 10 and (vendorValue * quantity) <= 100" })
-  eq(ns.db.version, 5)
+  eq(ns.db.version, 6)
+end)
+
+test("v5 SavedVariables: the unedited Tight bags rule gets the stack check, an edited one is left alone", function()
+  local ns = T.load({ version = 5, ruleset = { default = "loot", rules = {
+    { name = "Tight bags", when = { expr = "quality <= COMMON and vendorValue * maxStack < silver(5) and freeSlots <= 4" },
+      action = "leave", enabled = false },
+    { name = "Mine", when = { expr = "quality <= COMMON and freeSlots <= 4" }, action = "leave" },
+  } } })
+  local rules = ns.db.ruleset.rules
+  eq(rules[1].when.expr, ns.DEFAULTS.ruleset.rules[5].when.expr)
+  eq(rules[1].enabled, false, "only the condition is upgraded")
+  eq(rules[2].when.expr, "quality <= COMMON and freeSlots <= 4")
+  eq(ns.db.version, 6)
 end)
 
 test("migration keeps the precedence of an expression it adds terms to", function()
@@ -318,7 +357,7 @@ end)
 
 test("v1 'verbose' setting migrates to debug", function()
   local ns = T.load({ version = 1, verbose = true })
-  eq(ns.db.debug, true); eq(ns.db.verbose, nil); eq(ns.db.version, 5)
+  eq(ns.db.debug, true); eq(ns.db.verbose, nil); eq(ns.db.version, 6)
 end)
 
 test("/lr opens settings; toggles still work", function()
@@ -357,7 +396,7 @@ test("settings are booleans set through Config", function()
   ns.Config.Set("ruleset", false)
   ns.Config.Set("version", true)
   ns.Config.Set("nonsense", true)
-  eq(type(ns.db.ruleset), "table"); eq(ns.db.version, 5); eq(ns.db.nonsense, nil)
+  eq(type(ns.db.ruleset), "table"); eq(ns.db.version, 6); eq(ns.db.nonsense, nil)
   eq(refreshes, 2)
 end)
 

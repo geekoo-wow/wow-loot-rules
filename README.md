@@ -124,15 +124,22 @@ Default rules:
 | 2 | Whitelist | `inList("whitelist")` | loot |
 | 3 | Quest items | `isQuest` | loot |
 | 4 | Cheap junk | `quality == POOR and vendorValue * maxStack < silver(1)` | leave |
-| 5 | Tight bags | `quality <= COMMON and vendorValue * maxStack < silver(5) and freeSlots <= 4` | leave |
+| 5 | Tight bags | `quality <= COMMON and vendorValue * maxStack < silver(5) and freeSlots <= 4 and quantity > stackRoom` | leave |
 
 The junk rules judge an item by what a **full stack** is worth (its value per
 bag slot), so a stackable grey worth 41c each (4s 10c per stack of 10) is
 looted however many drop.
 
+Tight bags only leaves a drop that would take a **new bag slot**. Loot joins
+the stacks you already carry before it takes an empty slot, so with 17 of a
+20-stack in your bags, three more cost nothing to pick up and are looted
+however tight the bags; a fourth would need a slot. `stackRoom` is how many
+more units fit into those stacks (0 if you carry none), so
+`quantity > stackRoom` is "this drop needs a slot".
+
 A condition is a Lua expression over the item's fields (`quality`,
 `vendorValue`, `maxStack`, `quantity`, `name`, `itemID`, `ilvl`, `classID`,
-`subclassID`, `bindType`, `freeSlots`, `owned`, …) with helpers such as
+`subclassID`, `bindType`, `freeSlots`, `owned`, `stackRoom`, …) with helpers such as
 `silver(n)`, `gold(n)`, `inList("name")` and `matches(name, "pattern")`. The
 full list is in the in-game **Rules reference** panel. Typos in field names
 are rejected when you save.
@@ -144,10 +151,11 @@ Fields are primitives; anything derived is arithmetic in the condition:
 | `vendorValue` | vendor sell price of one unit, in copper (100c = 1s, 10,000c = 1g) |
 | `maxStack` | most units a stack can hold |
 | `quantity` | how many units dropped (1 on tooltips) |
+| `stackRoom` | how many more units fit into the stacks of it already in your bags (0 if you carry none) |
 
 `vendorValue * maxStack` is what a bag slot of the item can be worth, which
 is what the default junk rules use. `vendorValue * quantity` is the value of
-what dropped.
+what dropped. `quantity > stackRoom` means the drop takes a new bag slot.
 
 **Unknown data.** Item data can be missing (item not cached yet, values
 hidden during combat). A condition that reads a missing value is

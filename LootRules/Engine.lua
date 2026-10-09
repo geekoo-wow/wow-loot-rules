@@ -123,6 +123,7 @@ Conditions.ilvl       = rangeField("ilvl")
 Conditions.reqLevel   = rangeField("reqLevel")
 Conditions.freeSlots  = rangeField("freeSlots")   -- free bag slots right now
 Conditions.owned      = rangeField("owned")       -- how many of this item you already carry
+Conditions.stackRoom  = rangeField("stackRoom")   -- units that still fit into the stacks of it already carried
 Conditions.itemID     = setField("itemID")
 Conditions.classID    = setField("classID")       -- Enum.ItemClass (2 weapon, 4 armor, 7 tradegoods, 15 misc...)
 Conditions.subclassID = setField("subclassID")
@@ -192,6 +193,7 @@ Engine.Fields = {
   { "isReagent",   "boolean", "crafting reagent" },
   { "freeSlots",   "number",  "free general-purpose bag slots right now" },
   { "owned",       "number",  "how many of this item you already carry" },
+  { "stackRoom",   "number",  "how many more fit into the stacks of it you carry (quantity > stackRoom = needs a new bag slot)" },
 }
 
 local function readOnly() error("expressions cannot assign", 2) end

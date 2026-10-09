@@ -258,6 +258,19 @@ test("default rules: tight bags leave cheap whites, keep valuable ones", functio
   eq((decide(ns, ns.db.ruleset, pricey)), "loot")
 end)
 
+test("default rules: tight bags leave only what would take a new bag slot", function()
+  local ns = T.load()
+  local M = T.mock
+  M.bags.free = 2
+  local leather = M.item(114, { name = "Light Leather", quality = 1, sellPrice = 15, maxStack = 20 })
+  eq((decide(ns, ns.db.ruleset, leather, 3)), "leave", "no stack of it to join")
+  M.bagItems = { [0] = { [1] = { id = 114, count = 17 } } }
+  eq((decide(ns, ns.db.ruleset, leather, 3)), "loot", "joins the stack, so no slot is used")
+  eq((decide(ns, ns.db.ruleset, leather, 4)), "leave", "one unit over what the stack can take")
+  M.bags.free = 10
+  eq((decide(ns, ns.db.ruleset, leather, 4)), "loot", "bags aren't tight")
+end)
+
 test("lazy context only loads what rules read", function()
   local ns = T.load()
   local calls = 0
