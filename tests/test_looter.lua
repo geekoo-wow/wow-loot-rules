@@ -18,12 +18,18 @@ local function printedMatching(pattern)
   return out
 end
 
+-- A window opening: the game fires LOOT_READY, then LOOT_OPENED once it shows.
+local function open(ns, autoLoot)
+  ns.Looter.frame:Fire("LOOT_READY", autoLoot or false)
+  ns.Looter.frame:Fire("LOOT_OPENED", autoLoot or false)
+end
+
 test("loots accepted slots highest-first, leaves junk, closes when done", function()
   local ns = T.load()
   setupItems()
   local M = T.mock
   M.openLoot({ { money = 123 }, { id = 1, qty = 2 }, { id = 2, qty = 3 }, { id = 3 } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   eq(M.looted, { 4, 3, 1 }, "sword, silk, coins — not the junk")
   eq(M.closed, 0, "waits for pending slots")
   ns.Looter.frame:Fire("LOOT_SLOT_CLEARED", 4)
@@ -38,18 +44,34 @@ test("does not close when everything was looted", function()
   setupItems()
   local M = T.mock
   M.openLoot({ { id = 2 }, { id = 3 } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   ns.Looter.frame:Fire("LOOT_SLOT_CLEARED", 2)
   ns.Looter.frame:Fire("LOOT_SLOT_CLEARED", 1)
   eq(M.closed, 0)
 end)
 
-test("nothing wanted: closes immediately", function()
+-- A CloseLoot() before LOOT_OPENED is lost, so with nothing to take the
+-- window used to sit open: the close has to wait for the window.
+test("nothing wanted: closes as soon as the window is open, not before", function()
   local ns = T.load()
   setupItems()
   T.mock.openLoot({ { id = 1 } })
   ns.Looter.frame:Fire("LOOT_READY", false)
-  eq(T.mock.looted, {}); eq(T.mock.closed, 1)
+  eq(T.mock.looted, {}); eq(T.mock.closed, 0, "not showing yet")
+  ns.Looter.frame:Fire("LOOT_OPENED", false)
+  eq(T.mock.closed, 1)
+end)
+
+test("an empty loot window is closed too", function()
+  local ns = T.load()
+  T.mock.openLoot({})
+  open(ns)
+  eq(T.mock.closed, 1)
+  ns.Looter.frame:Fire("LOOT_CLOSED")
+  ns.db.closeWhenDone = false
+  T.mock.openLoot({})
+  open(ns)
+  eq(T.mock.closed, 0, "unless the window is set to stay open")
 end)
 
 test("closeWhenDone off leaves the window open", function()
@@ -57,7 +79,7 @@ test("closeWhenDone off leaves the window open", function()
   setupItems()
   ns.db.closeWhenDone = false
   T.mock.openLoot({ { id = 1 } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   eq(T.mock.closed, 0)
 end)
 
@@ -69,7 +91,7 @@ test("keep-open key held: the rules still run, the window stays open", function(
   ns.Config.SetKeepOpenModifier("CTRL")
   M.keys.CTRL = true
   M.openLoot({ { id = 1 }, { id = 2 } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   eq(M.looted, { 2 }, "the junk is still left")
   M.keys.CTRL = false -- let go before the silk reaches the bags
   ns.Looter.frame:Fire("LOOT_SLOT_CLEARED", 2)
@@ -78,7 +100,7 @@ test("keep-open key held: the rules still run, the window stays open", function(
 
   ns.Looter.frame:Fire("LOOT_CLOSED")
   M.openLoot({ { id = 1 } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   eq(M.closed, 1, "the next window, opened without the key, closes as usual")
 end)
 
@@ -88,20 +110,20 @@ test("keep-open key: off by default, and only the configured key counts", functi
   local M = T.mock
   M.keys.CTRL, M.keys.ALT, M.keys.SHIFT = true, true, true
   M.openLoot({ { id = 1 } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   eq(M.closed, 1, "no key configured")
   ns.Looter.frame:Fire("LOOT_CLOSED")
 
   ns.Config.SetKeepOpenModifier("CTRL")
   M.keys.CTRL = false
   M.openLoot({ { id = 1 } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   eq(M.closed, 1, "Alt and Shift held, Ctrl configured")
   ns.Looter.frame:Fire("LOOT_CLOSED")
 
   ns.Config.SetKeepOpenModifier("ALT")
   M.openLoot({ { id = 1 } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   eq(M.closed, 0)
 end)
 
@@ -111,7 +133,7 @@ test("quest items are always looted", function()
   ns.db.lists.blacklist[4] = nil
   T.mock.bags.free = 0
   T.mock.openLoot({ { id = 4, quest = true } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   eq(T.mock.looted, { 1 })
 end)
 
@@ -123,12 +145,12 @@ test("a drop that joins a stack you carry is looted; one that needs a slot faces
   M.bags.free = 2
   M.bagItems = { [0] = { [1] = { id = 8, count = 17 } } }
   M.openLoot({ { id = 8, qty = 3 } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   eq(M.looted, { 1 }, "three fit into the stack of 17")
   eq(#printedMatching("looted.*Light Leather.* x3 — #4 Fits in a stack %[quantity 3, stackRoom 3%]"), 1)
   ns.Looter.frame:Fire("LOOT_CLOSED")
   M.openLoot({ { id = 8, qty = 4 } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   eq(M.looted, {}, "the fourth unit would take a slot")
   eq(#printedMatching("left.*Light Leather.* x4 — #6 Tight bags "
     .. "%[quality 1, vendorValue 15c, maxStack 20, freeSlots 2%]"), 1)
@@ -138,7 +160,7 @@ test("locked slots are never touched", function()
   local ns = T.load()
   setupItems()
   T.mock.openLoot({ { id = 3, locked = true } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   eq(T.mock.looted, {})
 end)
 
@@ -147,7 +169,7 @@ test("a locked slot counts as left: the window closes once our picks are in", fu
   setupItems()
   ns.db.debug = true
   T.mock.openLoot({ { id = 3, locked = true }, { id = 2 } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   eq(T.mock.looted, { 2 }); eq(T.mock.closed, 0)
   ns.Looter.frame:Fire("LOOT_SLOT_CLEARED", 2)
   eq(T.mock.closed, 1)
@@ -159,7 +181,7 @@ test("money and currency are looted whatever the rules say", function()
   setupItems()
   ns.Config.SetDefaultAction("leave")
   T.mock.openLoot({ { money = 5 }, { currency = true }, { id = 2 } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   eq(T.mock.looted, { 2, 1 }, "currency and coins; the silk falls to the default")
 end)
 
@@ -174,7 +196,7 @@ test("missing data never gets an item left behind", function()
   ns.db.ruleset.rules = { { name = "No reagents", when = { expr = "not isReagent" }, action = "leave" } }
   ns.Rebuild()
   M.openLoot({ { id = 6 }, { id = 7 } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   eq(M.looted, { 1 }, "the trinket is a known non-reagent; the reagent's data is missing")
   eq(#printedMatching("undetermined: No reagents: condition"), 1)
   ns.Looter.frame:Fire("LOOT_CLOSED")
@@ -184,7 +206,7 @@ test("missing data never gets an item left behind", function()
   local hidden = {} -- stands in for a value the game hides in combat
   M.secret[hidden] = true
   M.openLoot({ { id = 7, quest = hidden }, { id = 7 } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   eq(M.looted, { 1 }, "a hidden quest flag is unknown in a real loot slot, not 'false'")
   eq(#printedMatching("undetermined: No quest: condition"), 1)
 end)
@@ -193,12 +215,12 @@ test("each loot window starts a fresh session", function()
   local ns = T.load()
   setupItems()
   T.mock.openLoot({ { id = 1 }, { id = 2 } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   eq(T.mock.looted, { 2 })
   ns.Looter.frame:Fire("LOOT_CLOSED") -- closed by hand before the slot cleared
   eq(ns.Looter.session.active, false); eq(next(ns.Looter.session.pending), nil)
   T.mock.openLoot({ { id = 3 } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   eq(T.mock.looted, { 1 })
   ns.Looter.frame:Fire("LOOT_SLOT_CLEARED", 1)
   eq(T.mock.closed, 0, "nothing was left in the second window")
@@ -207,6 +229,7 @@ end)
 test("loot events outside a session are ignored", function()
   local ns = T.load()
   setupItems()
+  ns.Looter.frame:Fire("LOOT_OPENED", false)
   ns.Looter.frame:Fire("LOOT_SLOT_CLEARED", 1)
   ns.Looter.frame:Fire("LOOT_BIND_CONFIRM", 1)
   eq(T.mock.closed, 0); eq(T.mock.confirmed, {})
@@ -217,7 +240,7 @@ test("dry run loots everything and prints what would have happened", function()
   setupItems()
   ns.db.dryRun = true
   T.mock.openLoot({ { id = 1 }, { id = 2 } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   eq(T.mock.looted, { 2, 1 })
   eq(#printedMatching("%[dry run%] would loot .*Silk Cloth.* — no rule matched %(default%)"), 1)
   eq(#printedMatching("%[dry run%] .*would leave.*Tattered Cloth.* — #5 Cheap junk %[quality 0, vendorValue 5c, maxStack 1%]"), 1)
@@ -229,7 +252,7 @@ test("debug mode prints each decision with the deciding rule", function()
   ns.db.debug = true
   ns.db.lists.whitelist[1] = true
   T.mock.openLoot({ { id = 1, qty = 3 }, { id = 3 } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   -- Debug text is wrapped in a color code, hence the trailing |r.
   eq(#printedMatching("looted.*Green Sword.* x1 — no rule matched %(default%)|r$"), 1, "no values for default")
   eq(#printedMatching("looted.*Tattered Cloth.* x3 — #2 Whitelist|r$"), 1, "inList reads no values")
@@ -241,7 +264,7 @@ test("debug mode shows undetermined conditions", function()
   ns.db.debug = true
   T.mock.items[1].cached = false
   T.mock.openLoot({ { id = 1 } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   eq(#printedMatching("undetermined: Cheap junk: condition"), 1)
 end)
 
@@ -249,7 +272,7 @@ test("without debug or dry run, decisions are silent", function()
   local ns = T.load()
   setupItems()
   T.mock.openLoot({ { id = 1 }, { id = 2 } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   eq(#T.mock.printed, 0)
 end)
 
@@ -258,9 +281,9 @@ test("built-in autoloot: does nothing and warns once", function()
   setupItems()
   T.mock.cvars.autoLootDefault = "1"
   T.mock.openLoot({ { id = 1 } })
-  ns.Looter.frame:Fire("LOOT_READY", true)
+  open(ns, true)
   ns.Looter.frame:Fire("LOOT_CLOSED")
-  ns.Looter.frame:Fire("LOOT_READY", true)
+  open(ns, true)
   eq(T.mock.looted, {})
   local warnings = 0
   for _, m in ipairs(T.mock.printed) do if m:find("Auto Loot option is on") then warnings = warnings + 1 end end
@@ -271,8 +294,8 @@ test("duplicate LOOT_READY in one window is ignored", function()
   local ns = T.load()
   setupItems()
   T.mock.openLoot({ { id = 2 } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
+  open(ns)
   eq(T.mock.looted, { 1 })
 end)
 
@@ -281,7 +304,7 @@ test("BoP prompt confirmed only for slots we chose", function()
   setupItems()
   ns.db.lists.blacklist[5] = true
   T.mock.openLoot({ { id = 5 }, { id = 3 } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   ns.Looter.frame:Fire("LOOT_BIND_CONFIRM", 1) -- blacklisted ring: not ours
   ns.Looter.frame:Fire("LOOT_BIND_CONFIRM", 2)
   eq(T.mock.confirmed, { 2 })
@@ -293,7 +316,7 @@ test("BoP prompts are left alone when auto-confirm is off", function()
   setupItems()
   ns.db.confirmBoP = false
   T.mock.openLoot({ { id = 5 } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   ns.Looter.frame:Fire("LOOT_BIND_CONFIRM", 1)
   eq(T.mock.looted, { 1 }); eq(T.mock.confirmed, {}); eq(T.mock.popupsHidden, {})
 end)
@@ -303,7 +326,7 @@ test("autoloot modifier held: the game loots, LootRules stays out and doesn't wa
   setupItems()
   ns.db.debug = true
   T.mock.openLoot({ { id = 1 } })
-  ns.Looter.frame:Fire("LOOT_READY", true) -- the game's Auto Loot option is off
+  open(ns, true) -- the game's Auto Loot option is off
   eq(T.mock.looted, {}); eq(T.mock.closed, 0)
   eq(ns.Looter.session.active, false)
   eq(#printedMatching("Auto Loot option is on"), 0)
@@ -315,7 +338,7 @@ test("disabled addon does nothing", function()
   setupItems()
   ns.db.enabled = false
   T.mock.openLoot({ { id = 2 } })
-  ns.Looter.frame:Fire("LOOT_READY", false)
+  open(ns)
   eq(T.mock.looted, {})
 end)
 

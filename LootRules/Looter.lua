@@ -23,8 +23,11 @@ local function slotTypes()
   return SLOT_ITEM, SLOT_MONEY, SLOT_CURRENCY
 end
 
--- State for the currently open loot window.
-local session = { active = false, pending = {}, leftAny = false, keepOpen = false }
+-- State for the currently open loot window. `stays` means the game won't
+-- close the window by itself (something was left on the corpse, or there was
+-- nothing to take at all: it only closes once the last slot is looted).
+-- `opened` means LOOT_OPENED has fired, so the window is really showing.
+local session = { active = false, pending = {}, stays = false, keepOpen = false, opened = false }
 Looter.session = session
 
 local warnedBuiltin = false
@@ -59,9 +62,12 @@ local function keepOpenHeld()
   return isDown ~= nil and isDown() and true or false
 end
 
+-- Close once our picks are all in and the window would otherwise stay. Not
+-- before LOOT_OPENED: LOOT_READY fires first, and a CloseLoot() between the
+-- two is lost, so a corpse with nothing to take was left sitting open.
 local function maybeClose()
-  if session.active and ns.db.closeWhenDone and not session.keepOpen and session.leftAny
-    and next(session.pending) == nil then
+  if session.active and session.opened and ns.db.closeWhenDone and not session.keepOpen
+    and session.stays and next(session.pending) == nil then
     CloseLoot()
   end
 end
@@ -85,7 +91,6 @@ function Looter.Process(autoLoot)
   end
 
   session.active = true
-  session.leftAny = false
   -- Read once, as the window opens: letting go while the slots are still
   -- being looted doesn't close it after all.
   session.keepOpen = keepOpenHeld()
@@ -93,8 +98,11 @@ function Looter.Process(autoLoot)
 
   local ITEM, MONEY, CURRENCY = slotTypes()
 
+  local count = GetNumLootItems()
+  session.stays = count == 0 -- nothing to take: the game won't close an empty window
+
   -- Highest slot first so looting can't shift indices under us.
-  for slot = GetNumLootItems(), 1, -1 do
+  for slot = count, 1, -1 do
     local kind = GetLootSlotType(slot)
     if kind == MONEY or kind == CURRENCY then
       session.pending[slot] = true
@@ -103,7 +111,7 @@ function Looter.Process(autoLoot)
       local ctx = ns.Context.FromLootSlot(slot, db.lists)
       local label = string.format("%s x%s", ctx.link or ctx.name or "?", tostring(ctx.quantity or 1))
       if ctx.locked then
-        session.leftAny = true -- someone else's roll / master loot; not ours to take
+        session.stays = true -- someone else's roll / master loot; not ours to take
         ns.Debug("skipped " .. label .. " — slot is locked (roll or master loot)")
       else
         local action, rule, unknowns, ruleIndex, fields = ns.Engine.Evaluate(ns.compiled, ctx)
@@ -113,15 +121,20 @@ function Looter.Process(autoLoot)
           session.pending[slot] = true
           LootSlot(slot)
         else
-          session.leftAny = true
+          session.stays = true
         end
       end
     end
   end
 
-  if session.keepOpen and session.leftAny and db.closeWhenDone then
+  if session.keepOpen and session.stays and db.closeWhenDone then
     ns.Debug(ns.MODIFIER_LABELS[db.keepOpenModifier] .. " held — leaving the loot window open")
   end
+  maybeClose()
+end
+
+function Looter.OnOpened()
+  session.opened = true
   maybeClose()
 end
 
@@ -140,7 +153,8 @@ end
 
 function Looter.OnClosed()
   session.active = false
-  session.leftAny = false
+  session.opened = false
+  session.stays = false
   session.keepOpen = false
   wipe(session.pending)
 end
@@ -153,6 +167,7 @@ function Looter.Init()
   local frame = CreateFrame("Frame")
   frame:RegisterEvent("ADDON_LOADED")
   frame:RegisterEvent("LOOT_READY")
+  frame:RegisterEvent("LOOT_OPENED")
   frame:RegisterEvent("LOOT_SLOT_CLEARED")
   frame:RegisterEvent("LOOT_BIND_CONFIRM")
   frame:RegisterEvent("LOOT_CLOSED")
@@ -165,6 +180,8 @@ function Looter.Init()
       end
     elseif event == "LOOT_READY" then
       Looter.Process(arg1)
+    elseif event == "LOOT_OPENED" then
+      Looter.OnOpened()
     elseif event == "LOOT_SLOT_CLEARED" then
       Looter.OnSlotCleared(arg1)
     elseif event == "LOOT_BIND_CONFIRM" then
