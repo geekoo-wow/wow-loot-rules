@@ -258,17 +258,22 @@ test("default rules: tight bags leave cheap whites, keep valuable ones", functio
   eq((decide(ns, ns.db.ruleset, pricey)), "loot")
 end)
 
-test("default rules: tight bags leave only what would take a new bag slot", function()
+test("default rules: what joins a stack you carry is looted before the junk rules get a say", function()
   local ns = T.load()
   local M = T.mock
   M.bags.free = 2
   local leather = M.item(114, { name = "Light Leather", quality = 1, sellPrice = 15, maxStack = 20 })
-  eq((decide(ns, ns.db.ruleset, leather, 3)), "leave", "no stack of it to join")
-  M.bagItems = { [0] = { [1] = { id = 114, count = 17 } } }
-  eq((decide(ns, ns.db.ruleset, leather, 3)), "loot", "joins the stack, so no slot is used")
+  local grey = M.item(115, { name = "Grey Scrap", quality = 0, sellPrice = 1, maxStack = 20 })
+  eq((decide(ns, ns.db.ruleset, leather, 3)), "leave", "no stack of it to join: tight bags")
+  M.bagItems = { [0] = { [1] = { id = 114, count = 17 }, [2] = { id = 115, count = 5 } } }
+  local action, rule = decide(ns, ns.db.ruleset, leather, 3)
+  eq(action, "loot"); eq(rule, "Fits in a stack")
   eq((decide(ns, ns.db.ruleset, leather, 4)), "leave", "one unit over what the stack can take")
-  M.bags.free = 10
-  eq((decide(ns, ns.db.ruleset, leather, 4)), "loot", "bags aren't tight")
+  action, rule = decide(ns, ns.db.ruleset, grey, 10)
+  eq(action, "loot"); eq(rule, "Fits in a stack", "cheap junk too, once it costs no slot")
+  ns.db.lists.blacklist[114] = true
+  action, rule = decide(ns, ns.db.ruleset, leather, 3)
+  eq(action, "leave"); eq(rule, "Blacklist", "the lists still come first")
 end)
 
 test("lazy context only loads what rules read", function()

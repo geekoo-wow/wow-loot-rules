@@ -8,7 +8,7 @@ ns.name = ADDON or "LootRules"
 -- Forever beta currently fails to load SavedVariables at startup; with these
 -- defaults the addon still does something sensible after every restart.
 ns.DEFAULTS = {
-  version = 6,
+  version = 7,
   enabled = true,
   dryRun = false,        -- evaluate and print decisions, but loot everything
   debug = false,         -- print every decision, with the rule that made it
@@ -27,15 +27,17 @@ ns.DEFAULTS = {
       { name = "Blacklist",   when = { expr = 'inList("blacklist")' }, action = "leave" },
       { name = "Whitelist",   when = { expr = 'inList("whitelist")' }, action = "loot" },
       { name = "Quest items", when = { expr = "isQuest" },             action = "loot" },
+      -- Loot joins the stacks already in the bags before it takes an empty
+      -- slot, so a drop that fits into one costs no bag space: taken before
+      -- the junk rules below get a say.
+      { name = "Fits in a stack", when = { expr = "quantity <= stackRoom" }, action = "loot" },
       -- Judged by what a full stack is worth, i.e. what the item is worth per
       -- bag slot, so the outcome doesn't depend on how many happened to drop.
       { name = "Cheap junk",
         when = { expr = "quality == POOR and vendorValue * maxStack < silver(1)" },
         action = "leave" },
-      -- Only when the drop would take a new slot: loot joins the stacks
-      -- already in the bags, so what fits into one costs nothing to pick up.
       { name = "Tight bags",
-        when = { expr = "quality <= COMMON and vendorValue * maxStack < silver(5) and freeSlots <= 4 and quantity > stackRoom" },
+        when = { expr = "quality <= COMMON and vendorValue * maxStack < silver(5) and freeSlots <= 4" },
         action = "leave" },
     },
   },
@@ -112,9 +114,32 @@ local OLD_DEFAULTS = {
     { quality = { max = 1 }, stackValue = { max = 499 }, freeSlots = { max = 4 } },        -- v1
     { expr = "quality <= COMMON and stackValue < silver(5) and freeSlots <= 4" },           -- v2
     { expr = "quality <= COMMON and stackVendorPrice < silver(5) and freeSlots <= 4" },     -- v3-v4
-    { expr = "quality <= COMMON and vendorValue * maxStack < silver(5) and freeSlots <= 4" }, -- v5
+    -- v6 (0.4.0-alpha.1): the stack check now has its own rule, Fits in a stack
+    { expr = "quality <= COMMON and vendorValue * maxStack < silver(5) and freeSlots <= 4 and quantity > stackRoom" },
   },
 }
+
+-- The default rule lists as shipped before, by name and in order. A list
+-- that is still one of these, rule for rule, is replaced by the current
+-- defaults: that is how a new default rule reaches an existing install.
+-- Anything else (a rule added, removed, reordered, renamed, disabled or
+-- edited) is the user's and is left as it is.
+local OLD_RULE_LISTS = {
+  { "Blacklist", "Whitelist", "Quest items", "Cheap junk", "Tight bags" }, -- v1-v6
+}
+
+-- True when `rules` is one of OLD_RULE_LISTS with every rule an unedited
+-- copy of the current default of that name (run after the per-rule upgrade).
+local function isOldRuleList(rules, current)
+  for _, names in ipairs(OLD_RULE_LISTS) do
+    local same = #rules == #names
+    for i = 1, #names do
+      same = same and deepEqual(rules[i], current[names[i]])
+    end
+    if same then return true end
+  end
+  return false
+end
 
 -- Fields that no longer exist, and what replaces them in saved rules. Each
 -- is rewritten as its own definition, so old rules behave exactly as before.
@@ -188,7 +213,7 @@ local function migrate(db)
   end
 
   local rules = db.ruleset and db.ruleset.rules
-  if type(rules) == "table" and (db.version or 1) < 6 then
+  if type(rules) == "table" and (db.version or 1) < 7 then
     local current = {}
     for _, r in ipairs(ns.DEFAULTS.ruleset.rules) do current[r.name] = r end
     for _, rule in ipairs(rules) do
@@ -203,6 +228,9 @@ local function migrate(db)
         end
         if not upgraded then rewriteFields(rule.when) end
       end
+    end
+    if isOldRuleList(rules, current) then
+      db.ruleset.rules = deepCopy(ns.DEFAULTS.ruleset.rules)
     end
   end
 
@@ -283,7 +311,7 @@ function ns.FormatMoney(c)
   return cc .. "c"
 end
 
--- "#4 Cheap junk" / "no rule matched (default)"
+-- "#5 Cheap junk" / "no rule matched (default)"
 function ns.DescribeDecider(ruleName, ruleIndex)
   if ruleIndex then return string.format("#%d %s", ruleIndex, ruleName) end
   return "no rule matched (default)"

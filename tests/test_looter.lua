@@ -115,7 +115,7 @@ test("quest items are always looted", function()
   eq(T.mock.looted, { 1 })
 end)
 
-test("tight bags: a drop that joins a stack you carry is looted, one that needs a slot is left", function()
+test("a drop that joins a stack you carry is looted; one that needs a slot faces the junk rules", function()
   local ns = T.load()
   local M = T.mock
   M.item(8, { name = "Light Leather", quality = 1, sellPrice = 15, maxStack = 20 })
@@ -125,12 +125,13 @@ test("tight bags: a drop that joins a stack you carry is looted, one that needs 
   M.openLoot({ { id = 8, qty = 3 } })
   ns.Looter.frame:Fire("LOOT_READY", false)
   eq(M.looted, { 1 }, "three fit into the stack of 17")
+  eq(#printedMatching("looted.*Light Leather.* x3 — #4 Fits in a stack %[quantity 3, stackRoom 3%]"), 1)
   ns.Looter.frame:Fire("LOOT_CLOSED")
   M.openLoot({ { id = 8, qty = 4 } })
   ns.Looter.frame:Fire("LOOT_READY", false)
   eq(M.looted, {}, "the fourth unit would take a slot")
-  eq(#printedMatching("left.*Light Leather.* x4 — #5 Tight bags "
-    .. "%[quality 1, vendorValue 15c, maxStack 20, freeSlots 2, quantity 4, stackRoom 3%]"), 1)
+  eq(#printedMatching("left.*Light Leather.* x4 — #6 Tight bags "
+    .. "%[quality 1, vendorValue 15c, maxStack 20, freeSlots 2%]"), 1)
 end)
 
 test("locked slots are never touched", function()
@@ -219,7 +220,7 @@ test("dry run loots everything and prints what would have happened", function()
   ns.Looter.frame:Fire("LOOT_READY", false)
   eq(T.mock.looted, { 2, 1 })
   eq(#printedMatching("%[dry run%] would loot .*Silk Cloth.* — no rule matched %(default%)"), 1)
-  eq(#printedMatching("%[dry run%] .*would leave.*Tattered Cloth.* — #4 Cheap junk %[quality 0, vendorValue 5c, maxStack 1%]"), 1)
+  eq(#printedMatching("%[dry run%] .*would leave.*Tattered Cloth.* — #5 Cheap junk %[quality 0, vendorValue 5c, maxStack 1%]"), 1)
 end)
 
 test("debug mode prints each decision with the deciding rule", function()

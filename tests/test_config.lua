@@ -137,24 +137,24 @@ end)
 
 test("invalid updates change nothing", function()
   local ns = T.load()
-  local before = ns.Config.RuleExpr(ns.Config.Rules()[4])
-  truthy(ns.Config.UpdateRule(4, { name = "renamed", expr = "quality <" }))
-  eq(ns.Config.Rules()[4].name, "Cheap junk")
-  eq(ns.Config.RuleExpr(ns.Config.Rules()[4]), before)
-  truthy(ns.Config.UpdateRule(4, { action = "burn" }))
-  truthy(ns.Config.UpdateRule(4, { name = "renamed", onUnknown = "sometimes" }))
-  eq(ns.Config.Rules()[4].name, "Cheap junk")
-  eq(ns.Config.Rules()[4].onUnknown, nil)
+  local before = ns.Config.RuleExpr(ns.Config.Rules()[5])
+  truthy(ns.Config.UpdateRule(5, { name = "renamed", expr = "quality <" }))
+  eq(ns.Config.Rules()[5].name, "Cheap junk")
+  eq(ns.Config.RuleExpr(ns.Config.Rules()[5]), before)
+  truthy(ns.Config.UpdateRule(5, { action = "burn" }))
+  truthy(ns.Config.UpdateRule(5, { name = "renamed", onUnknown = "sometimes" }))
+  eq(ns.Config.Rules()[5].name, "Cheap junk")
+  eq(ns.Config.Rules()[5].onUnknown, nil)
   eq(ns.Config.UpdateRule(99, { name = "x" }), "no such rule")
   eq(#ns.compileErrors, 0)
 end)
 
 test("onUnknown is stored only when it isn't the default", function()
   local ns = T.load()
-  eq(ns.Config.UpdateRule(4, { onUnknown = "match" }), nil)
-  eq(ns.Config.Rules()[4].onUnknown, "match")
-  eq(ns.Config.UpdateRule(4, { onUnknown = "skip" }), nil)
-  eq(ns.Config.Rules()[4].onUnknown, nil)
+  eq(ns.Config.UpdateRule(5, { onUnknown = "match" }), nil)
+  eq(ns.Config.Rules()[5].onUnknown, "match")
+  eq(ns.Config.UpdateRule(5, { onUnknown = "skip" }), nil)
+  eq(ns.Config.Rules()[5].onUnknown, nil)
 end)
 
 test("new rules never match until edited", function()
@@ -237,8 +237,8 @@ test("tester reports action, deciding rule and index", function()
   local ns = T.load()
   local link = T.mock.item(340, { name = "Tattered Cloth", quality = 0, sellPrice = 5 })
   local r = ns.Config.TestItem(link, 2)
-  eq(r.action, "leave"); eq(r.rule, "Cheap junk"); eq(r.ruleIndex, 4)
-  eq(ns.DescribeDecider(r.rule, r.ruleIndex), "#4 Cheap junk")
+  eq(r.action, "leave"); eq(r.rule, "Cheap junk"); eq(r.ruleIndex, 5)
+  eq(ns.DescribeDecider(r.rule, r.ruleIndex), "#5 Cheap junk")
   eq(ns.Config.TestItem(link, 40).action, "leave", "unstackable: a full stack is still 5c")
 end)
 
@@ -287,7 +287,7 @@ end)
 
 test("arithmetic works in conditions", function()
   local ns = T.load()
-  ns.Config.UpdateRule(4, { expr = "quality == POOR and vendorValue * math.min(maxStack, 5) < silver(1)" })
+  ns.Config.UpdateRule(5, { expr = "quality == POOR and vendorValue * math.min(maxStack, 5) < silver(1)" })
   local link = T.mock.item(344, { name = "Grey", quality = 0, sellPrice = 19, maxStack = 20 })
   eq(ns.Config.TestItem(link).action, "leave", "19c x 5 = 95c")
 end)
@@ -303,26 +303,61 @@ test("v2 SavedVariables: unedited old defaults upgrade, edited rules keep their 
   } } })
   local rules = ns.db.ruleset.rules
   eq(rules[1].when.expr, "quality == POOR and vendorValue * maxStack < silver(1)")
-  eq(rules[2].when.expr,
-    "quality <= COMMON and vendorValue * maxStack < silver(5) and freeSlots <= 4 and quantity > stackRoom")
+  eq(rules[2].when.expr, "quality <= COMMON and vendorValue * maxStack < silver(5) and freeSlots <= 4")
   eq(rules[3].when.expr, "vendorValue > 10 and (vendorValue * quantity) < silver(2) and mysellPriceX",
     "whole identifiers only")
   eq(rules[4].when, { vendorValue = { max = 5 } })
   eq(rules[5].when, { expr = "quality <= 0 and (vendorValue * quantity) >= 10 and (vendorValue * quantity) <= 100" })
-  eq(ns.db.version, 6)
+  eq(#rules, 5, "an edited list gets no new rule")
+  eq(ns.db.version, 7)
 end)
 
-test("v5 SavedVariables: the unedited Tight bags rule gets the stack check, an edited one is left alone", function()
-  local ns = T.load({ version = 5, ruleset = { default = "loot", rules = {
-    { name = "Tight bags", when = { expr = "quality <= COMMON and vendorValue * maxStack < silver(5) and freeSlots <= 4" },
-      action = "leave", enabled = false },
-    { name = "Mine", when = { expr = "quality <= COMMON and freeSlots <= 4" }, action = "leave" },
-  } } })
-  local rules = ns.db.ruleset.rules
-  eq(rules[1].when.expr, ns.DEFAULTS.ruleset.rules[5].when.expr)
-  eq(rules[1].enabled, false, "only the condition is upgraded")
-  eq(rules[2].when.expr, "quality <= COMMON and freeSlots <= 4")
-  eq(ns.db.version, 6)
+-- The default rule list as shipped in v1-v5 (v6, the 0.4.0 alpha, had the
+-- stack check inside Tight bags instead of its own rule). A fresh copy per
+-- call: the addon upgrades SavedVariables in place.
+local function v5Rules()
+  return {
+    { name = "Blacklist",   when = { expr = 'inList("blacklist")' }, action = "leave" },
+    { name = "Whitelist",   when = { expr = 'inList("whitelist")' }, action = "loot" },
+    { name = "Quest items", when = { expr = "isQuest" },             action = "loot" },
+    { name = "Cheap junk",  when = { expr = "quality == POOR and vendorValue * maxStack < silver(1)" }, action = "leave" },
+    { name = "Tight bags",  when = { expr = "quality <= COMMON and vendorValue * maxStack < silver(5) and freeSlots <= 4" },
+      action = "leave" },
+  }
+end
+
+test("v5/v6 SavedVariables: an unedited default rule list gains Fits in a stack", function()
+  local ns = T.load({ version = 5, ruleset = { default = "leave", rules = v5Rules() } })
+  eq(ns.db.ruleset.rules, ns.DEFAULTS.ruleset.rules)
+  eq(ns.db.ruleset.default, "leave", "the default action is kept")
+  eq(ns.db.version, 7)
+  local v6 = v5Rules()
+  v6[5].when.expr = v6[5].when.expr .. " and quantity > stackRoom"
+  ns = T.load({ version = 6, ruleset = { rules = v6 } })
+  eq(ns.db.ruleset.rules, ns.DEFAULTS.ruleset.rules, "the alpha's Tight bags is an unedited default too")
+  eq(ns.db.version, 7)
+end)
+
+test("an edited rule list keeps its shape; its default rules are still upgraded one by one", function()
+  local rules = v5Rules()
+  rules[5].enabled = false
+  rules[5].when.expr = "quality <= COMMON and stackVendorPrice < silver(5) and freeSlots <= 4" -- v3 text
+  local ns = T.load({ version = 4, ruleset = { rules = rules } })
+  eq(#ns.db.ruleset.rules, 5, "no rule added")
+  eq(ns.db.ruleset.rules[5].enabled, false)
+  eq(ns.db.ruleset.rules[5].when.expr, ns.DEFAULTS.ruleset.rules[6].when.expr)
+
+  rules = v5Rules()
+  rules[3], rules[4] = rules[4], rules[3]
+  ns = T.load({ version = 5, ruleset = { rules = rules } })
+  eq(#ns.db.ruleset.rules, 5)
+  eq(ns.db.ruleset.rules[3].name, "Cheap junk", "reordered: left alone")
+
+  rules = v5Rules()
+  rules[#rules + 1] = { name = "Mine", when = { expr = "quality == EPIC" }, action = "leave" }
+  ns = T.load({ version = 5, ruleset = { rules = rules } })
+  eq(#ns.db.ruleset.rules, 6)
+  eq(ns.db.ruleset.rules[6].name, "Mine")
 end)
 
 test("migration keeps the precedence of an expression it adds terms to", function()
@@ -357,7 +392,7 @@ end)
 
 test("v1 'verbose' setting migrates to debug", function()
   local ns = T.load({ version = 1, verbose = true })
-  eq(ns.db.debug, true); eq(ns.db.verbose, nil); eq(ns.db.version, 6)
+  eq(ns.db.debug, true); eq(ns.db.verbose, nil); eq(ns.db.version, 7)
 end)
 
 test("/lr opens settings; toggles still work", function()
@@ -396,7 +431,7 @@ test("settings are booleans set through Config", function()
   ns.Config.Set("ruleset", false)
   ns.Config.Set("version", true)
   ns.Config.Set("nonsense", true)
-  eq(type(ns.db.ruleset), "table"); eq(ns.db.version, 6); eq(ns.db.nonsense, nil)
+  eq(type(ns.db.ruleset), "table"); eq(ns.db.version, 7); eq(ns.db.nonsense, nil)
   eq(refreshes, 2)
 end)
 
@@ -443,7 +478,7 @@ end)
 -- isn't a quest item unless its class says so (a real slot would say).
 test("previews assume non-Quest-class items aren't quest items", function()
   local ns = T.load()
-  ns.Config.UpdateRule(4, { expr = "not isQuest and quality == POOR" })
+  ns.Config.UpdateRule(5, { expr = "not isQuest and quality == POOR" })
   local grey = T.mock.item(363, { name = "Grey", quality = 0, sellPrice = 1 })
   local r = ns.Config.TestItem(grey)
   eq(r.action, "leave"); eq(r.unknowns, nil)
@@ -468,7 +503,7 @@ end)
 test("unknown values show as ?", function()
   local ns = T.load()
   T.mock.bags.free = 1
-  ns.Config.UpdateRule(5, { expr = "freeSlots <= 4 and owned >= 0" })
+  ns.Config.UpdateRule(6, { expr = "freeSlots <= 4 and owned >= 0" })
   local link = T.mock.item(362, { name = "White", quality = 1, sellPrice = 99999 })
   eq(ns.Config.TestItem(link).values, "freeSlots 1, owned 0")
   eq(ns.FormatValues({ vendorValue = nil, name = "A" }, { "vendorValue", "name" }), 'vendorValue ?, name "A"')

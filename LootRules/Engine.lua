@@ -193,7 +193,7 @@ Engine.Fields = {
   { "isReagent",   "boolean", "crafting reagent" },
   { "freeSlots",   "number",  "free general-purpose bag slots right now" },
   { "owned",       "number",  "how many of this item you already carry" },
-  { "stackRoom",   "number",  "how many more fit into the stacks of it you carry (quantity > stackRoom = needs a new bag slot)" },
+  { "stackRoom",   "number",  "how many more fit into the stacks of it you carry (quantity <= stackRoom = no new bag slot needed)" },
 }
 
 local function readOnly() error("expressions cannot assign", 2) end

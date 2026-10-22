@@ -81,7 +81,7 @@ hovering any item, in bags, chat links, vendors or the auction house, adds the
 verdict and the values the deciding rule read:
 
 ```
-LootRules: Leave — #4 Cheap junk
+LootRules: Leave — #5 Cheap junk
     quality 0, vendorValue 9c, maxStack 10
 ```
 
@@ -102,7 +102,7 @@ With **Debug output** on, every decision is printed as it happens, with the
 rule that made it and the values that rule read (and nothing else):
 
 ```
-LootRules: left [Tattered Cloth] x2 — #4 Cheap junk [quality 0, vendorValue 5c, maxStack 1]
+LootRules: left [Tattered Cloth] x2 — #5 Cheap junk [quality 0, vendorValue 5c, maxStack 1]
 LootRules: looted [Silk Cloth] x3 — no rule matched (default)
 LootRules: looted [Light Leather] x1 — no rule matched (default) (undetermined: Tight bags: condition)
 ```
@@ -123,19 +123,20 @@ Default rules:
 | 1 | Blacklist | `inList("blacklist")` | leave |
 | 2 | Whitelist | `inList("whitelist")` | loot |
 | 3 | Quest items | `isQuest` | loot |
-| 4 | Cheap junk | `quality == POOR and vendorValue * maxStack < silver(1)` | leave |
-| 5 | Tight bags | `quality <= COMMON and vendorValue * maxStack < silver(5) and freeSlots <= 4 and quantity > stackRoom` | leave |
+| 4 | Fits in a stack | `quantity <= stackRoom` | loot |
+| 5 | Cheap junk | `quality == POOR and vendorValue * maxStack < silver(1)` | leave |
+| 6 | Tight bags | `quality <= COMMON and vendorValue * maxStack < silver(5) and freeSlots <= 4` | leave |
 
 The junk rules judge an item by what a **full stack** is worth (its value per
 bag slot), so a stackable grey worth 41c each (4s 10c per stack of 10) is
 looted however many drop.
 
-Tight bags only leaves a drop that would take a **new bag slot**. Loot joins
-the stacks you already carry before it takes an empty slot, so with 17 of a
-20-stack in your bags, three more cost nothing to pick up and are looted
-however tight the bags; a fourth would need a slot. `stackRoom` is how many
-more units fit into those stacks (0 if you carry none), so
-`quantity > stackRoom` is "this drop needs a slot".
+Fits in a stack takes anything that joins a stack you already carry, before
+the junk rules get a say: loot joins partial stacks before it takes an empty
+slot, so with 17 of a 20-stack in your bags, three more cost no bag space at
+all; a fourth would need a slot and is judged by the rules below. `stackRoom`
+is how many more units fit into those stacks (0 if you carry none). The lists
+still come first, so a blacklisted item is left however well it stacks.
 
 A condition is a Lua expression over the item's fields (`quality`,
 `vendorValue`, `maxStack`, `quantity`, `name`, `itemID`, `ilvl`, `classID`,
@@ -155,7 +156,7 @@ Fields are primitives; anything derived is arithmetic in the condition:
 
 `vendorValue * maxStack` is what a bag slot of the item can be worth, which
 is what the default junk rules use. `vendorValue * quantity` is the value of
-what dropped. `quantity > stackRoom` means the drop takes a new bag slot.
+what dropped. `quantity <= stackRoom` means the drop takes no new bag slot.
 
 **Unknown data.** Item data can be missing (item not cached yet, values
 hidden during combat). A condition that reads a missing value is
@@ -227,7 +228,12 @@ GitHub release. The commit convention and steps are in
 
 Saved rules are upgraded automatically when the addon loads, with each
 removed field rewritten as its definition, so they behave exactly as before;
-unedited copies of older default rules become the current defaults.
+unedited copies of older default rules become the current defaults. A rule
+list that is still the shipped defaults, rule for rule, becomes the current
+default list: that is how a new default rule such as Fits in a stack reaches
+an existing install. A list you have edited (a rule added, removed,
+reordered, disabled or changed) is left alone; add the rule by hand or use
+**Reset to defaults**.
 
 | Old field | Versions | Becomes |
 |---|---|---|
