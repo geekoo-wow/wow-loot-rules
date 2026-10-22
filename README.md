@@ -31,8 +31,10 @@ client's line and to the base `## Interface:` line.
    **turn off the game's Auto Loot** there. The client loots everything before
    addons can intervene, so LootRules only works with it off. Holding the
    autoloot modifier (Shift by default) makes the client loot everything on
-   that one corpse, a handy override. You can also pick a key that does the
-   opposite: your rules still run, but the loot window stays open (see
+   that one corpse, a handy override. LootRules has two keys of its own for
+   this: one that loots everything through the addon (see
+   [Taking everything](#taking-everything)) and one that does the opposite,
+   running your rules but keeping the loot window open (see
    [Keeping the window open](#keeping-the-window-open)).
 
 Start with **Dry run** on for a few kills: everything is still looted, and
@@ -43,8 +45,8 @@ chat shows what the rules *would* have done and which rule decided.
 Everything is configured in Options > AddOns > LootRules:
 
 - **LootRules**: enable/disable, dry run, debug output, close the loot window
-  when done and the key that keeps it open, auto-confirm bind-on-pickup, the
-  tooltip line, and the game's Auto Loot status.
+  when done, the keys that keep it open or loot everything, auto-confirm
+  bind-on-pickup, the tooltip line, and the game's Auto Loot status.
 - **Rules**: the ordered rule list. Select a rule to edit its name, action
   (Loot/Leave) and condition; the condition is validated as you type. Rules
   can be added, reordered, disabled and deleted, and the action for items no
@@ -73,6 +75,20 @@ settings panel warns when the two are the same. Either pick another key, or
 set the game's autoloot key to None in the game's own options. The key is
 read when the window opens, so you can let go while the items are still
 being looted.
+
+## Taking everything
+
+The opposite key: choose one with the **Hold to loot everything** button
+(None by default; Ctrl, Alt or Shift) and hold it while opening a corpse to
+loot everything on it, whatever your rules say. It does what the game's own
+autoloot key does, but through LootRules, so bind-on-pickup prompts are
+confirmed for you; it is the key to use if you have set the game's autoloot
+key to None. Locked slots (rolls, master loot) are still left alone, and
+debug output notes the key instead of printing a decision per item.
+
+Give the two keys different modifiers: held, a key set for both loots
+everything, leaving nothing to keep the window open for. The settings panel
+warns about that, and about either key being the game's autoloot key.
 
 ## Item tooltips
 

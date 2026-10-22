@@ -314,23 +314,32 @@ local function BuildGeneral()
       "Add a line to item tooltips saying whether your rules would loot or leave the item, and which rule decides. "
       .. "Tooltips assume a single unit dropped."),
   }
-  -- The key that overrides "Close loot window when done" sits under that
-  -- checkbox; the checkbox after it leaves room.
-  local keepOpen = Button(f, "", 250, function() Config.CycleKeepOpenModifier() end)
-  keepOpen:SetPoint("TOPLEFT", closeCheck, "BOTTOMLEFT", 28, -2)
-  Tooltip(keepOpen, "Keep the loot window open",
+  -- The keys held while a corpse opens sit under the close checkbox (the
+  -- first overrides it); the checkbox after leaves room for both.
+  local function KeyButton(name, prefix, title, tip)
+    local b = Button(f, "", 250, function() Config.CycleModifier(name) end)
+    b.setting, b.prefix = name, prefix
+    Tooltip(b, title, tip .. " Click to switch between None, Ctrl, Alt and Shift.")
+    b.warn = Label(f, "", "GameFontHighlightSmall")
+    b.warn:SetPoint("LEFT", b, "RIGHT", 8, 0)
+    b.warn:SetPoint("RIGHT", f, "RIGHT", -PAD, 0)
+    return b
+  end
+  local keepOpen = KeyButton("keepOpenModifier", "Hold to keep the window open: ", "Keep the loot window open",
     "Hold this key while opening a corpse to apply your rules but keep the loot window open, so you can take "
-    .. "anything they left by hand. Click to switch between None, Ctrl, Alt and Shift.")
-  keepOpen.warn = Label(f, "", "GameFontHighlightSmall")
-  keepOpen.warn:SetPoint("LEFT", keepOpen, "RIGHT", 8, 0)
-  keepOpen.warn:SetPoint("RIGHT", f, "RIGHT", -PAD, 0)
+    .. "anything they left by hand.")
+  keepOpen:SetPoint("TOPLEFT", closeCheck, "BOTTOMLEFT", 28, -2)
+  local lootAll = KeyButton("lootAllModifier", "Hold to loot everything: ", "Loot everything",
+    "Hold this key while opening a corpse to loot everything on it, whatever your rules say, with bind-on-pickup "
+    .. "prompts confirmed as usual. The game's own autoloot key does the same, but before LootRules sees the loot.")
+  lootAll:SetPoint("TOPLEFT", keepOpen, "BOTTOMLEFT", 0, -4)
 
   local prev
   for i, cb in ipairs(checks) do
     if i == 1 then
       cb:SetPoint("TOPLEFT", PAD, -70)
     else
-      cb:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, prev == closeCheck and -30 or -4)
+      cb:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, prev == closeCheck and -56 or -4)
     end
     prev = cb
   end
@@ -346,8 +355,9 @@ local function BuildGeneral()
   end)
   toggle:SetPoint("TOPLEFT", status, "BOTTOMLEFT", 0, -8)
 
-  local help = Label(f, COLOR_DIM .. "Holding the autoloot modifier (Shift by default) while opening a corpse makes "
-    .. "the game loot everything on it, bypassing your rules for that corpse.|r", "GameFontHighlightSmall")
+  local help = Label(f, COLOR_DIM .. "Holding the game's autoloot modifier (Shift by default) while opening a corpse "
+    .. "makes the game loot everything on it before LootRules sees the loot. The Hold to loot everything key above "
+    .. "does the same through LootRules, so bind-on-pickup prompts are confirmed for you.|r", "GameFontHighlightSmall")
   help:SetPoint("TOPLEFT", toggle, "BOTTOMLEFT", 0, -10)
   help:SetPoint("RIGHT", f, "RIGHT", -PAD, 0)
 
@@ -357,13 +367,21 @@ local function BuildGeneral()
 
   function f:Refresh()
     for _, cb in ipairs(checks) do cb:Refresh() end
-    local key = Config.KeepOpenModifier()
-    keepOpen:SetText("Hold to keep the window open: " .. Config.ModifierLabel(key))
-    -- The game's own autoloot key wins: held, it loots everything before the rules run.
-    local clash = key ~= "NONE" and _G.GetModifiedClick and _G.GetModifiedClick("AUTOLOOTTOGGLE") == key
-    keepOpen.warn:SetText(clash and (COLOR_LEAVE .. Config.ModifierLabel(key)
-      .. " is also the game's autoloot key, which loots everything. Pick another key, "
-      .. "or set the game's autoloot key to None.|r") or "")
+    local gameKey = _G.GetModifiedClick and _G.GetModifiedClick("AUTOLOOTTOGGLE")
+    for _, b in ipairs({ keepOpen, lootAll }) do
+      local key, other = Config.Modifier(b.setting), b == keepOpen and lootAll or keepOpen
+      local label = Config.ModifierLabel(key)
+      b:SetText(b.prefix .. label)
+      local warn
+      if key ~= "NONE" and key == gameKey then
+        -- The game's own autoloot key wins: held, it loots everything before the rules run.
+        warn = label .. " is also the game's autoloot key, which loots everything before LootRules sees the loot. "
+          .. "Pick another key, or set the game's autoloot key to None."
+      elseif key ~= "NONE" and key == Config.Modifier(other.setting) then
+        warn = label .. " is also the other key: held, it loots everything, so nothing is left to keep the window open for."
+      end
+      b.warn:SetText(warn and (COLOR_LEAVE .. warn .. "|r") or "")
+    end
     if GetCVarBool("autoLootDefault") then
       status:SetText(COLOR_ERR .. "On|r — the game loots everything before LootRules can filter. Turn it off to use your rules.")
       toggle:SetText("Turn game Auto Loot off")

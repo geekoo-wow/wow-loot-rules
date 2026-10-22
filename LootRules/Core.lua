@@ -15,6 +15,8 @@ ns.DEFAULTS = {
   closeWhenDone = true,  -- close the window once our picks are looted, leaving the rest on the corpse
   -- "CTRL", "ALT" or "SHIFT": held while opening a corpse, the rules still run but the window stays open
   keepOpenModifier = "NONE",
+  -- Likewise, but everything on the corpse is looted, whatever the rules say
+  lootAllModifier = "NONE",
   confirmBoP = true,     -- auto-confirm bind-on-pickup prompts for slots *we* chose to loot
   tooltip = true,        -- show the rules' decision on item tooltips
   lists = {
@@ -43,7 +45,9 @@ ns.DEFAULTS = {
   },
 }
 
--- Choices for keepOpenModifier, in the order the settings cycle through them.
+-- The settings that hold a key, each read as a corpse opens.
+ns.KEY_SETTINGS = { "keepOpenModifier", "lootAllModifier" }
+-- Their choices, in the order the settings cycle through them.
 ns.MODIFIERS = { "NONE", "CTRL", "ALT", "SHIFT" }
 ns.MODIFIER_LABELS = { NONE = "None", CTRL = "Ctrl", ALT = "Alt", SHIFT = "Shift" }
 
@@ -87,11 +91,13 @@ local function normalizeRules(db)
   end
 end
 
--- A keepOpenModifier that isn't one of ns.MODIFIERS counts as missing.
+-- A key setting that isn't one of ns.MODIFIERS counts as missing.
 local function normalizeSettings(db)
-  local key = db.keepOpenModifier
-  if type(key) == "string" then key = key:upper() end
-  db.keepOpenModifier = ns.MODIFIER_LABELS[key] and key or nil
+  for _, setting in ipairs(ns.KEY_SETTINGS) do
+    local key = db[setting]
+    if type(key) == "string" then key = key:upper() end
+    db[setting] = ns.MODIFIER_LABELS[key] and key or nil
+  end
 end
 
 local function deepEqual(a, b)

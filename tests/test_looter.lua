@@ -88,7 +88,7 @@ test("keep-open key held: the rules still run, the window stays open", function(
   setupItems()
   local M = T.mock
   ns.db.debug = true
-  ns.Config.SetKeepOpenModifier("CTRL")
+  ns.Config.SetModifier("keepOpenModifier", "CTRL")
   M.keys.CTRL = true
   M.openLoot({ { id = 1 }, { id = 2 } })
   open(ns)
@@ -114,17 +114,65 @@ test("keep-open key: off by default, and only the configured key counts", functi
   eq(M.closed, 1, "no key configured")
   ns.Looter.frame:Fire("LOOT_CLOSED")
 
-  ns.Config.SetKeepOpenModifier("CTRL")
+  ns.Config.SetModifier("keepOpenModifier", "CTRL")
   M.keys.CTRL = false
   M.openLoot({ { id = 1 } })
   open(ns)
   eq(M.closed, 1, "Alt and Shift held, Ctrl configured")
   ns.Looter.frame:Fire("LOOT_CLOSED")
 
-  ns.Config.SetKeepOpenModifier("ALT")
+  ns.Config.SetModifier("keepOpenModifier", "ALT")
   M.openLoot({ { id = 1 } })
   open(ns)
   eq(M.closed, 0)
+end)
+
+test("loot-everything key held: everything is taken, the rules are skipped, locked slots stay", function()
+  local ns = T.load()
+  setupItems()
+  local M = T.mock
+  ns.db.debug = true
+  ns.db.lists.blacklist[5] = true
+  ns.Config.SetModifier("lootAllModifier", "ALT")
+  M.keys.ALT = true
+  M.openLoot({ { id = 1 }, { id = 5 }, { id = 3, locked = true }, { money = 5 } })
+  open(ns)
+  eq(M.looted, { 4, 2, 1 }, "the junk and the blacklisted ring too; not the locked slot")
+  eq(#printedMatching("Alt held — looting everything on this corpse"), 1)
+  eq(#printedMatching("Cheap junk"), 0, "no rule decided anything")
+  ns.Looter.frame:Fire("LOOT_BIND_CONFIRM", 2)
+  eq(M.confirmed, { 2 }, "bind-on-pickup is confirmed for what the key took")
+  eq(M.closed, 0, "the locked slot stays, so the window closes once our picks are in")
+  ns.Looter.frame:Fire("LOOT_SLOT_CLEARED", 4)
+  ns.Looter.frame:Fire("LOOT_SLOT_CLEARED", 2)
+  ns.Looter.frame:Fire("LOOT_SLOT_CLEARED", 1)
+  eq(M.closed, 1)
+end)
+
+test("loot-everything key: off by default, only the configured key counts, dry run says why", function()
+  local ns = T.load()
+  setupItems()
+  local M = T.mock
+  M.keys.CTRL, M.keys.ALT, M.keys.SHIFT = true, true, true
+  M.openLoot({ { id = 1 }, { id = 2 } })
+  open(ns)
+  eq(M.looted, { 2 }, "no key configured: the junk is left")
+  ns.Looter.frame:Fire("LOOT_CLOSED")
+
+  ns.Config.SetModifier("lootAllModifier", "CTRL")
+  M.keys.CTRL = false
+  M.openLoot({ { id = 1 }, { id = 2 } })
+  open(ns)
+  eq(M.looted, { 2 }, "Alt and Shift held, Ctrl configured")
+  ns.Looter.frame:Fire("LOOT_CLOSED")
+
+  ns.db.dryRun = true
+  M.keys.CTRL = true
+  M.openLoot({ { id = 1 }, { id = 2 } })
+  open(ns)
+  eq(M.looted, { 2, 1 })
+  eq(#printedMatching("Ctrl held — looting everything on this corpse"), 1, "printed in dry run without debug")
+  eq(#printedMatching("would"), 0, "nothing to report: the rules didn't run")
 end)
 
 test("quest items are always looted", function()

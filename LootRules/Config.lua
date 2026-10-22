@@ -22,24 +22,30 @@ function Config.Set(key, value)
   ns.ConfigChanged()
 end
 
--- The key that keeps the loot window open when held as it opens: one of
--- ns.MODIFIERS, "NONE" for no key.
-function Config.KeepOpenModifier() return ns.db.keepOpenModifier end
+-- The keys held while a corpse opens (ns.KEY_SETTINGS): "keepOpenModifier"
+-- keeps the loot window open, "lootAllModifier" loots everything on it. Each
+-- is one of ns.MODIFIERS, "NONE" for no key.
+local isKeySetting = {}
+for _, setting in ipairs(ns.KEY_SETTINGS) do isKeySetting[setting] = true end
 
-function Config.SetKeepOpenModifier(key)
-  if not ns.MODIFIER_LABELS[key] then return end
-  ns.db.keepOpenModifier = key
+function Config.Modifier(setting)
+  if isKeySetting[setting] then return ns.db[setting] end
+end
+
+function Config.SetModifier(setting, key)
+  if not isKeySetting[setting] or not ns.MODIFIER_LABELS[key] then return end
+  ns.db[setting] = key
   ns.ConfigChanged()
 end
 
--- Switch to the next choice in ns.MODIFIERS, wrapping around.
-function Config.CycleKeepOpenModifier()
+-- Switch a key setting to the next choice in ns.MODIFIERS, wrapping around.
+function Config.CycleModifier(setting)
   local keys = ns.MODIFIERS
   local at = 0
   for i, key in ipairs(keys) do
-    if key == ns.db.keepOpenModifier then at = i end
+    if key == ns.db[setting] then at = i end
   end
-  Config.SetKeepOpenModifier(keys[at % #keys + 1])
+  Config.SetModifier(setting, keys[at % #keys + 1])
 end
 
 function Config.ModifierLabel(key) return ns.MODIFIER_LABELS[key] or ns.MODIFIER_LABELS.NONE end

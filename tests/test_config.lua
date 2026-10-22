@@ -435,28 +435,36 @@ test("settings are booleans set through Config", function()
   eq(refreshes, 2)
 end)
 
-test("the keep-open key is one of the known modifiers", function()
+test("the hold keys are one of the known modifiers", function()
   local ns = T.load()
-  eq(ns.Config.KeepOpenModifier(), "NONE", "off until a key is chosen")
+  eq(ns.Config.Modifier("keepOpenModifier"), "NONE", "off until a key is chosen")
+  eq(ns.Config.Modifier("lootAllModifier"), "NONE")
   local refreshes = 0
   ns.OnConfigChanged = function() refreshes = refreshes + 1 end
-  ns.Config.SetKeepOpenModifier("ALT")
+  ns.Config.SetModifier("keepOpenModifier", "ALT")
   eq(ns.db.keepOpenModifier, "ALT")
-  ns.Config.SetKeepOpenModifier("META"); ns.Config.SetKeepOpenModifier(nil)
+  ns.Config.SetModifier("keepOpenModifier", "META"); ns.Config.SetModifier("keepOpenModifier", nil)
   eq(ns.db.keepOpenModifier, "ALT"); eq(refreshes, 1)
+  ns.Config.SetModifier("debug", "ALT")
+  eq(ns.db.debug, false, "only the key settings take a key"); eq(refreshes, 1)
+  eq(ns.Config.Modifier("debug"), nil)
   local seen = {}
   for _ = 1, #ns.MODIFIERS do
-    ns.Config.CycleKeepOpenModifier()
+    ns.Config.CycleModifier("keepOpenModifier")
     seen[#seen + 1] = ns.db.keepOpenModifier
   end
   eq(seen, { "SHIFT", "NONE", "CTRL", "ALT" }, "cycles through every choice and wraps")
+  ns.Config.CycleModifier("lootAllModifier")
+  eq(ns.db.lootAllModifier, "CTRL"); eq(ns.db.keepOpenModifier, "ALT", "each key on its own")
 end)
 
-test("a hand-edited keep-open key is normalized at load", function()
+test("hand-edited hold keys are normalized at load", function()
   eq(T.load({ keepOpenModifier = "alt" }).db.keepOpenModifier, "ALT")
   eq(T.load({ keepOpenModifier = "CTRL" }).db.keepOpenModifier, "CTRL")
   eq(T.load({ keepOpenModifier = "banana" }).db.keepOpenModifier, "NONE")
   eq(T.load({ keepOpenModifier = 3 }).db.keepOpenModifier, "NONE")
+  eq(T.load({ lootAllModifier = "shift" }).db.lootAllModifier, "SHIFT")
+  eq(T.load({ lootAllModifier = true }).db.lootAllModifier, "NONE")
 end)
 
 -- ---- relevant values ------------------------------------------------------------

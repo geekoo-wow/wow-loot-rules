@@ -6,9 +6,12 @@
 -- (Shift by default) then makes the client loot everything for that one
 -- corpse, which doubles as a "just take it all" override.
 --
--- Holding the addon's own key (db.keepOpenModifier) while the window opens
--- is the opposite override: the rules run as usual, but the window stays
--- open so what they left can still be picked up by hand.
+-- The addon has two keys of its own, read as the window opens.
+-- db.lootAllModifier does what the game's key does, but through LootRules
+-- (so bind-on-pickup prompts are confirmed): everything is looted, whatever
+-- the rules say. db.keepOpenModifier is the opposite override: the rules run
+-- as usual, but the window stays open so what they left can still be picked
+-- up by hand.
 
 local _, ns = ...
 ns = ns or {}
@@ -54,11 +57,11 @@ local function builtinAutolootOn()
   return _G.GetCVarBool and _G.GetCVarBool("autoLootDefault")
 end
 
--- db.keepOpenModifier -> is that key down? "NONE" has no entry.
+-- A key setting's value -> is that key down? "NONE" has no entry.
 local MODIFIER_DOWN = { SHIFT = IsShiftKeyDown, CTRL = IsControlKeyDown, ALT = IsAltKeyDown }
 
-local function keepOpenHeld()
-  local isDown = MODIFIER_DOWN[ns.db.keepOpenModifier]
+local function keyHeld(setting)
+  local isDown = MODIFIER_DOWN[ns.db[setting]]
   return isDown ~= nil and isDown() and true or false
 end
 
@@ -91,9 +94,13 @@ function Looter.Process(autoLoot)
   end
 
   session.active = true
-  -- Read once, as the window opens: letting go while the slots are still
-  -- being looted doesn't close it after all.
-  session.keepOpen = keepOpenHeld()
+  -- Both keys are read once, as the window opens: letting go while the slots
+  -- are still being looted changes nothing.
+  session.keepOpen = keyHeld("keepOpenModifier")
+  local lootAll = keyHeld("lootAllModifier")
+  if lootAll then
+    ns.Debug(ns.MODIFIER_LABELS[db.lootAllModifier] .. " held — looting everything on this corpse", db.dryRun)
+  end
   wipe(session.pending)
 
   local ITEM, MONEY, CURRENCY = slotTypes()
@@ -113,6 +120,9 @@ function Looter.Process(autoLoot)
       if ctx.locked then
         session.stays = true -- someone else's roll / master loot; not ours to take
         ns.Debug("skipped " .. label .. " — slot is locked (roll or master loot)")
+      elseif lootAll then
+        session.pending[slot] = true
+        LootSlot(slot)
       else
         local action, rule, unknowns, ruleIndex, fields = ns.Engine.Evaluate(ns.compiled, ctx)
         Looter.ReportDecision(label, action, rule, ruleIndex, unknowns, db.dryRun,
